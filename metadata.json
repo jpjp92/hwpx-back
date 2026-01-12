@@ -1,0 +1,6 @@
+
+{
+  "name": "HWPX Smart Parser & Editor",
+  "description": "An AI-powered document processor that extracts, edits, and regenerates HWPX data using Gemini 2.5 Flash.",
+  "requestFramePermissions": []
+}
