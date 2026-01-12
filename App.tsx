@@ -159,7 +159,7 @@ const App: React.FC = () => {
             <FileText className="text-blue-600" /> HWPX AI 스마트 편집기
           </h1>
           <p className="text-slate-500 text-sm flex items-center gap-1">
-            해촉증명서 데이터 치환 시스템 <span className="text-blue-400 font-bold ml-2 flex items-center gap-0.5"><Zap size={12} /> 초고속 모드</span>
+            해촉증명서 데이터 치환 시스템 <span className="text-blue-400 font-bold ml-2 flex items-center gap-0.5"><Zap size={12} /> 데모 테스트 </span>
           </p>
         </div>
 
