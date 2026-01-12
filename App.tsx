@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import JSZip from 'jszip';
-import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar } from 'lucide-react';
+import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar, Zap } from 'lucide-react';
 import { HWPXData, ProcessingState, FileInfo } from './types';
 import { parseHWPXContent } from './services/geminiService';
 
@@ -16,14 +16,34 @@ const App: React.FC = () => {
     error: null,
   });
 
+  const [loadingMsg, setLoadingMsg] = useState("문서 구조를 파악하고 있습니다...");
+
+  useEffect(() => {
+    let interval: any;
+    if (status.isParsing) {
+      const messages = [
+        "Gemini 2.5 Flash가 XML 데이터를 읽고 있습니다...",
+        "텍스트 영역에서 핵심 정보를 추출 중입니다...",
+        "신청인 및 업체 정보를 매핑하고 있습니다...",
+        "거의 다 되었습니다. 결과를 정리 중입니다..."
+      ];
+      let i = 0;
+      interval = setInterval(() => {
+        setLoadingMsg(messages[i % messages.length]);
+        i++;
+      }, 2500);
+    }
+    return () => clearInterval(interval);
+  }, [status.isParsing]);
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
     if (!uploadedFile) return;
 
     if (uploadedFile.name.endsWith('.hwp')) {
-      setStatus(prev => ({ 
-        ...prev, 
-        error: "이 프로그램은 .hwpx 형식만 지원합니다. .hwp 파일을 한글 프로그램에서 '다른 이름으로 저장'을 통해 '.hwpx'로 변환 후 업로드해주세요." 
+      setStatus(prev => ({
+        ...prev,
+        error: "이 프로그램은 .hwpx 형식만 지원합니다. .hwp 파일을 한글 프로그램에서 '다른 이름으로 저장'을 통해 '.hwpx'로 변환 후 업로드해주세요."
       }));
       setFileInfo(null);
       setExtractedData(null);
@@ -45,14 +65,14 @@ const App: React.FC = () => {
     try {
       const zip = await JSZip.loadAsync(uploadedFile);
       setOriginalZip(zip);
-      
+
       const sectionFiles = Object.keys(zip.files).filter(name => name.match(/Contents\/section\d+\.xml/i));
       if (sectionFiles.length === 0) throw new Error("문서 내용을 찾을 수 없습니다. 표준 HWPX 형식이 아닐 수 있습니다.");
 
       const xmlText = await zip.file(sectionFiles[0])!.async("string");
-      
+
       setStatus(prev => ({ ...prev, isUnzipping: false, isParsing: true }));
-      
+
       const data = await parseHWPXContent(xmlText);
       setExtractedData(data);
       setOriginalExtractedData(data);
@@ -88,11 +108,11 @@ const App: React.FC = () => {
 
         if (fileName.match(/Contents\/section\d+\.xml/i)) {
           let xmlContent = await file.async("string");
-          
+
           editableKeys.forEach((k) => {
             const originalVal = originalExtractedData[k];
             const currentVal = extractedData[k];
-            
+
             if (originalVal && currentVal && originalVal !== currentVal) {
               if (k === 'address') {
                 const prefixes = ['주소지:', '주소지 :', '주소지: ', '주소지'];
@@ -138,18 +158,20 @@ const App: React.FC = () => {
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <FileText className="text-blue-600" /> HWPX AI 스마트 편집기
           </h1>
-          <p className="text-slate-500 text-sm">해촉증명서 데이터 치환 시스템</p>
+          <p className="text-slate-500 text-sm flex items-center gap-1">
+            해촉증명서 데이터 치환 시스템 <span className="text-blue-400 font-bold ml-2 flex items-center gap-0.5"><Zap size={12} /> 초고속 모드</span>
+          </p>
         </div>
-        
+
         {extractedData && (
           <div className="flex gap-2">
-            <button 
+            <button
               onClick={resetChanges}
               className="px-4 py-2 bg-white text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2 text-sm font-medium"
             >
               <RotateCcw size={16} /> 초기화
             </button>
-            <button 
+            <button
               onClick={downloadUpdatedHWPX}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-bold shadow-lg shadow-blue-200"
             >
@@ -186,9 +208,9 @@ const App: React.FC = () => {
                   <p className="text-xs text-slate-500">{(fileInfo.size / 1024).toFixed(1)} KB</p>
                 </div>
                 {status.isParsing ? (
-                   <Loader2 className="animate-spin text-blue-500" size={18} />
+                  <Loader2 className="animate-spin text-blue-500" size={18} />
                 ) : (
-                   <CheckCircle2 className="text-green-500" size={18} />
+                  <CheckCircle2 className="text-green-500" size={18} />
                 )}
               </div>
             )}
@@ -202,7 +224,7 @@ const App: React.FC = () => {
           </section>
 
           {extractedData && (
-            <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+            <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6 animate-in fade-in slide-in-from-left-4 duration-500">
               <div>
                 <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                   <Edit3 size={16} className="text-blue-500" /> 2. 증명서 내용 수정
@@ -221,17 +243,17 @@ const App: React.FC = () => {
                       <label className="block text-[11px] font-bold text-slate-400 mb-1 group-focus-within:text-blue-500 transition-colors">
                         {field.icon}{field.label}
                       </label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         value={extractedData[field.id as keyof HWPXData]}
                         onChange={(e) => handleDataChange(field.id as keyof HWPXData, e.target.value)}
-                        className={`w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm outline-none ${field.id === 'issueDate' ? 'bg-amber-50/50 border-amber-100' : ''}`}
+                        className={`w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm outline-none ${field.id === 'issueDate' ? 'bg-amber-50/50 border-amber-100 font-bold text-amber-900' : ''}`}
                       />
                     </div>
                   ))}
                 </div>
               </div>
-              
+
               <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
                 <p className="text-[11px] text-amber-700 leading-relaxed font-medium">
                   💡 발급 날짜와 신청인 정보를 수정할 수 있습니다. 하단 업체 정보는 원본 데이터가 유지됩니다.
@@ -253,9 +275,23 @@ const App: React.FC = () => {
 
             {status.isParsing && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/95 z-20 backdrop-blur-sm">
-                <Loader2 className="animate-spin text-blue-500 mb-4" size={48} />
-                <p className="text-xl font-bold text-slate-800">Gemini 2.5 Flash가 분석 중...</p>
-                <p className="text-sm text-slate-400 mt-2">XML에서 텍스트 영역을 정밀하게 추출하고 있습니다</p>
+                <div className="relative mb-6">
+                  <Loader2 className="animate-spin text-blue-500" size={64} />
+                  <div className="absolute inset-0 animate-ping opacity-20 bg-blue-400 rounded-full scale-150"></div>
+                </div>
+                <p className="text-2xl font-bold text-slate-800">Gemini 2.5 Flash가 분석 중...</p>
+                <p className="text-slate-400 mt-3 font-medium animate-pulse">{loadingMsg}</p>
+                <div className="mt-8 w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 animate-[loading_20s_ease-in-out_infinite]"></div>
+                </div>
+                <style dangerouslySetInnerHTML={{
+                  __html: `
+                  @keyframes loading {
+                    0% { width: 0%; }
+                    50% { width: 70%; }
+                    100% { width: 95%; }
+                  }
+                `}} />
               </div>
             )}
 
@@ -299,7 +335,9 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="mt-40 text-center">
-                  <p className="text-2xl font-bold tracking-widest bg-amber-50/50 px-2 rounded">{extractedData.issueDate}</p>
+                  <p className="text-3xl font-bold tracking-widest bg-amber-50 px-6 py-2 rounded-xl inline-block border border-amber-100 shadow-sm text-amber-900">
+                    {extractedData.issueDate}
+                  </p>
                 </div>
 
                 <div className="absolute top-0 left-0 w-24 h-24 border-t-2 border-l-2 border-slate-100"></div>
@@ -311,10 +349,10 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
-      
+
       <footer className="w-full mt-12 py-8 text-center text-slate-400 text-xs">
         <p>미리보기에는 업체 정보가 생략되어 있으나, 다운로드 시에는 원본의 모든 정보가 포함됩니다.</p>
-        <p className="mt-1">© 2025 AI HWPX Smart Processor • Powered by Gemini 2.5 Flash</p>
+        <p className="mt-1">© 2025 AI HWPX Smart Processor • Powered by Gemini 2.5 Flash (Latency Optimized)</p>
       </footer>
     </div>
   );
