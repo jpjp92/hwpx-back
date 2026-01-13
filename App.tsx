@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import JSZip from 'jszip';
-import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar, Zap, FileType } from 'lucide-react';
+import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar, Zap, FileType, BookOpen } from 'lucide-react';
 import { HWPXData, ProcessingState, FileInfo } from './types';
 import { parseHWPXContent } from './services/geminiService';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
@@ -314,7 +314,12 @@ const App: React.FC = () => {
         <div className="lg:col-span-4 space-y-6">
           <Card className="p-5">
             <SectionHeader
-              title="1. 문서 업로드"
+              title={
+                <div className="flex items-center gap-2">
+                  <Upload size={16} className="text-blue-600" />
+                  <span>문서 업로드</span>
+                </div>
+              }
               right={
                 <div className="group relative">
                   <Info size={14} className="text-slate-300 cursor-help" />
@@ -364,7 +369,12 @@ const App: React.FC = () => {
           {extractedData && (
             <Card className="p-5 animate-in fade-in slide-in-from-left-4 duration-500">
               <SectionHeader
-                title="2. 증명서 내용 수정"
+                title={
+                  <div className="flex items-center gap-2">
+                    <Edit3 size={16} className="text-blue-600" />
+                    <span>증명서 내용 수정</span>
+                  </div>
+                }
                 subtitle="미리보기는 입력값과 연동되며, 다운로드 시 원문 구조를 유지한 채 텍스트만 치환됩니다."
               />
 
@@ -402,7 +412,12 @@ const App: React.FC = () => {
         <div className="lg:col-span-8 h-full">
           <Card className="p-5 h-full flex flex-col">
             <SectionHeader
-              title="2. 문서 미리보기"
+              title={
+                <div className="flex items-center gap-2">
+                  <BookOpen size={16} className="text-blue-600" />
+                  <span>문서 미리보기</span>
+                </div>
+              }
               right={
                 <div className="group relative">
                   <Info size={14} className="text-slate-300 cursor-help" />
