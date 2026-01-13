@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import JSZip from 'jszip';
 import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar, Zap, FileType, BookOpen } from 'lucide-react';
 import { HWPXData, ProcessingState, FileInfo } from './types';
-import { parseHWPXContent } from './services/geminiService';
+import { parseHWPXContentLocal as parseHWPXContent } from './services/localParserService';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 // ============================================================================
