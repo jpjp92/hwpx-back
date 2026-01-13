@@ -316,7 +316,7 @@ const App: React.FC = () => {
                         type="text"
                         value={extractedData[field.id as keyof HWPXData]}
                         onChange={(e) => handleDataChange(field.id as keyof HWPXData, e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm outline-none"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm outline-none font-medium"
                       />
                     </div>
                   ))}
@@ -347,14 +347,25 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {status.isParsing && (
+            {(status.isUnzipping || status.isParsing) && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#323639]/95 z-20 backdrop-blur-sm">
-                <div className="relative mb-6">
-                  <div className="w-20 h-20 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
-                  <div className="absolute inset-0 animate-ping opacity-20 bg-blue-400 rounded-full scale-125"></div>
+                <div className="w-full max-w-md px-8 flex flex-col items-center">
+                  <div className="relative mb-8">
+                    <div className="w-20 h-20 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
+                    <div className="absolute inset-0 animate-ping opacity-20 bg-blue-400 rounded-full scale-125"></div>
+                  </div>
+
+                  <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden mb-4 shadow-inner">
+                    <div className="bg-blue-500 h-full w-full origin-left animate-[loading-bar_1.5s_infinite_ease-in-out]"></div>
+                  </div>
+
+                  <p className="text-2xl font-black text-slate-100 uppercase tracking-tight">
+                    {status.isUnzipping ? "문서 압축 해제 중..." : "AI 데이터 분석 중..."}
+                  </p>
+                  <p className="text-slate-400 mt-2 font-medium animate-pulse tracking-wide h-6">
+                    {status.isParsing ? loadingMsg : "HWPX 파일 구조를 탐색하고 있습니다."}
+                  </p>
                 </div>
-                <p className="text-2xl font-black text-slate-100 uppercase tracking-tight">Gemini 2.5 Flash가 분석 중...</p>
-                <p className="text-slate-400 mt-3 font-medium animate-pulse tracking-wide">{loadingMsg}</p>
               </div>
             )}
 
@@ -375,51 +386,51 @@ const App: React.FC = () => {
                       <h1 className="text-[28pt] font-bold inline-block border-b-[1px] border-black pb-2 px-4">해 &nbsp; 촉 &nbsp; 증 &nbsp; 명 &nbsp; 서</h1>
                     </div>
 
-                    <div className="space-y-[10mm] text-[15pt] pl-[15mm]">
-                      {/* Grid 기반 정밀 정렬: 레이블(45mm) + 콜론 + 데이터 */}
-                      <div className="grid grid-cols-[45mm_10mm_1fr] items-start">
-                        <div className="flex justify-between pr-4"><span>신</span><span>청</span><span>인</span></div>
+                    <div className="space-y-[10mm] text-[15pt] pl-[15mm] pr-[10mm]">
+                      {/* Grid 기반 정밀 정렬: 레이블(35mm) + 콜론 + 데이터 */}
+                      <div className="grid grid-cols-[35mm_10mm_1fr] items-start">
+                        <div className="whitespace-nowrap">신 &nbsp; 청 &nbsp; 인</div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.applicant}</div>
                       </div>
 
-                      <div className="grid grid-cols-[45mm_10mm_1fr] items-center">
-                        <div className="tracking-tighter">주민등록번호</div>
+                      <div className="grid grid-cols-[35mm_10mm_1fr] items-center">
+                        <div className="whitespace-nowrap">주민등록번호</div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.ssn}</div>
                       </div>
 
-                      <div className="grid grid-cols-[45mm_10mm_1fr] items-start">
-                        <div className="flex justify-between pr-4"><span>주</span><span>소</span><span>지</span></div>
+                      <div className="grid grid-cols-[35mm_10mm_1fr] items-start">
+                        <div className="whitespace-nowrap">주 &nbsp; 소 &nbsp; 지</div>
                         <div className="text-center">:</div>
                         <div className="font-semibold leading-[1.6]">{extractedData.address}</div>
                       </div>
 
-                      <div className="grid grid-cols-[45mm_10mm_1fr] items-center">
-                        <div className="flex justify-between pr-4"><span>용</span><span>역</span><span>기</span><span>간</span></div>
+                      <div className="grid grid-cols-[35mm_10mm_1fr] items-center">
+                        <div className="whitespace-nowrap">용 &nbsp; 역 &nbsp; 기 &nbsp; 간</div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.servicePeriod}</div>
                       </div>
 
-                      <div className="grid grid-cols-[45mm_10mm_1fr] items-center">
-                        <div className="flex justify-between pr-4"><span>용</span><span>역</span><span>내</span><span>용</span></div>
+                      <div className="grid grid-cols-[35mm_10mm_1fr] items-center">
+                        <div className="whitespace-nowrap">용 &nbsp; 역 &nbsp; 내 &nbsp; 용</div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.serviceContent}</div>
                       </div>
 
-                      <div className="grid grid-cols-[45mm_10mm_1fr] items-center">
-                        <div className="flex justify-between pr-4"><span>용</span><span>도</span></div>
+                      <div className="grid grid-cols-[35mm_10mm_1fr] items-center">
+                        <div className="whitespace-nowrap">용 &nbsp; &nbsp; &nbsp; &nbsp; 도</div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.purpose}</div>
                       </div>
                     </div>
 
-                    <div className="mt-auto mb-[25mm] pr-[15mm]">
-                      <div className="text-right text-[15pt] font-medium mb-[25mm]">
+                    <div className="mt-auto mb-[30mm] flex flex-col items-end pr-[15mm] w-full">
+                      <div className="text-[15pt] font-medium mb-[40mm]">
                         위의 사실을 증명합니다.
                       </div>
 
-                      <div className="text-right text-[15pt] font-bold tracking-[0.1em] mb-[20mm]">
+                      <div className="text-[15pt] font-bold tracking-[0.1em]">
                         {extractedData.issueDate}
                       </div>
 
