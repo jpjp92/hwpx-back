@@ -64,12 +64,21 @@ export default async function handler(req: any, res: any) {
     11. issueDate: 발급일 (e.g. 2025년 12월 30일)
     
     XML: ${xmlContent.substring(0, 30000)}`;
+        console.log(`parse handler: received XML ${xmlContent.length} bytes`);
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
-        const text = response.text();
+        // response.text() returns a Promise<string>
+        const text = await response.text();
 
-        return res.status(200).json(JSON.parse(text));
+        try {
+            const parsed = JSON.parse(text);
+            return res.status(200).json(parsed);
+        } catch (parseErr: any) {
+            console.error("Failed to JSON.parse model response:", parseErr);
+            // Return raw text for debugging (not ideal for production)
+            return res.status(500).json({ error: 'Invalid JSON from model', raw: text, details: parseErr?.message });
+        }
     } catch (error: any) {
         console.error("Gemini API Error:", error);
         return res.status(500).json({ error: "Failed to parse document", details: error.message });
