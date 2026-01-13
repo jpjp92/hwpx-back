@@ -316,7 +316,7 @@ const App: React.FC = () => {
                         type="text"
                         value={extractedData[field.id as keyof HWPXData]}
                         onChange={(e) => handleDataChange(field.id as keyof HWPXData, e.target.value)}
-                        className={`w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm outline-none ${field.id === 'issueDate' ? 'bg-amber-50/50 border-amber-100 font-bold text-amber-900' : ''}`}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm outline-none"
                       />
                     </div>
                   ))}
@@ -371,65 +371,59 @@ const App: React.FC = () => {
                   <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]"></div>
 
                   <div className="relative flex-1 flex flex-col h-full z-10">
-                    <div className="text-center mt-[10mm] mb-[30mm]">
-                      <h1 className="text-[25pt] font-extrabold tracking-[1em] inline-block border-b-2 border-black pb-2 mr-[-1em]">해 촉 증 명 서</h1>
+                    <div className="text-center mt-[20mm] mb-[45mm]">
+                      <h1 className="text-[28pt] font-bold inline-block border-b-[1px] border-black pb-2 px-4">해 &nbsp; 촉 &nbsp; 증 &nbsp; 명 &nbsp; 서</h1>
                     </div>
 
-                    <div className="space-y-[10mm] text-[14pt] font-medium pl-[10mm]">
-                      <div className="flex items-center">
-                        <div className="w-[60mm] flex justify-between tracking-normal mr-8 shrink-0">
-                          <span>신</span><span>청</span><span>인</span>
-                        </div>
-                        <span className="mr-8 shrink-0">:</span>
-                        <span className="font-bold flex-1">{extractedData.applicant}</span>
+                    <div className="space-y-[10mm] text-[15pt] pl-[15mm]">
+                      {/* Grid 기반 정밀 정렬: 레이블(45mm) + 콜론 + 데이터 */}
+                      <div className="grid grid-cols-[45mm_10mm_1fr] items-start">
+                        <div className="flex justify-between pr-4"><span>신</span><span>청</span><span>인</span></div>
+                        <div className="text-center">:</div>
+                        <div className="font-semibold">{extractedData.applicant}</div>
                       </div>
-                      <div className="flex items-center">
-                        <div className="w-[60mm] flex justify-between tracking-normal mr-8 shrink-0">
-                          <span>주</span><span>민</span><span>등</span><span>록</span><span>번</span><span>호</span>
-                        </div>
-                        <span className="mr-8 shrink-0">:</span>
-                        <span className="font-bold flex-1">{extractedData.ssn}</span>
+
+                      <div className="grid grid-cols-[45mm_10mm_1fr] items-center">
+                        <div className="tracking-tighter">주민등록번호</div>
+                        <div className="text-center">:</div>
+                        <div className="font-semibold">{extractedData.ssn}</div>
                       </div>
-                      <div className="flex items-start">
-                        <div className="w-[60mm] flex justify-between tracking-normal mr-8 shrink-0">
-                          <span>주</span><span>소</span><span>지</span>
-                        </div>
-                        <span className="mr-8 mt-1 shrink-0">:</span>
-                        <span className="flex-1 leading-snug font-bold">{extractedData.address}</span>
+
+                      <div className="grid grid-cols-[45mm_10mm_1fr] items-start">
+                        <div className="flex justify-between pr-4"><span>주</span><span>소</span><span>지</span></div>
+                        <div className="text-center">:</div>
+                        <div className="font-semibold leading-[1.6]">{extractedData.address}</div>
                       </div>
-                      <div className="flex items-center">
-                        <div className="w-[60mm] flex justify-between tracking-normal mr-8 shrink-0">
-                          <span>용</span><span>역</span><span>기</span><span>간</span>
-                        </div>
-                        <span className="mr-8 shrink-0">:</span>
-                        <span className="font-bold flex-1">{extractedData.servicePeriod}</span>
+
+                      <div className="grid grid-cols-[45mm_10mm_1fr] items-center">
+                        <div className="flex justify-between pr-4"><span>용</span><span>역</span><span>기</span><span>간</span></div>
+                        <div className="text-center">:</div>
+                        <div className="font-semibold">{extractedData.servicePeriod}</div>
                       </div>
-                      <div className="flex items-center">
-                        <div className="w-[60mm] flex justify-between tracking-normal mr-8 shrink-0">
-                          <span>용</span><span>역</span><span>내</span><span>용</span>
-                        </div>
-                        <span className="mr-8 shrink-0">:</span>
-                        <span className="font-bold flex-1">{extractedData.serviceContent}</span>
+
+                      <div className="grid grid-cols-[45mm_10mm_1fr] items-center">
+                        <div className="flex justify-between pr-4"><span>용</span><span>역</span><span>내</span><span>용</span></div>
+                        <div className="text-center">:</div>
+                        <div className="font-semibold">{extractedData.serviceContent}</div>
                       </div>
-                      <div className="flex items-center">
-                        <div className="w-[60mm] flex justify-between tracking-normal mr-8 shrink-0">
-                          <span>용</span><span>도</span>
-                        </div>
-                        <span className="mr-8 shrink-0">:</span>
-                        <span className="font-bold flex-1">{extractedData.purpose}</span>
+
+                      <div className="grid grid-cols-[45mm_10mm_1fr] items-center">
+                        <div className="flex justify-between pr-4"><span>용</span><span>도</span></div>
+                        <div className="text-center">:</div>
+                        <div className="font-semibold">{extractedData.purpose}</div>
                       </div>
                     </div>
 
-                    <div className="mt-auto mb-[20mm]">
-                      <div className="text-right pr-[10mm] text-[14pt] font-bold mb-[25mm]">
+                    <div className="mt-auto mb-[25mm] pr-[15mm]">
+                      <div className="text-right text-[15pt] font-medium mb-[25mm]">
                         위의 사실을 증명합니다.
                       </div>
 
-                      <div className="text-center text-[18pt] font-black tracking-[0.2em] mb-[30mm]">
+                      <div className="text-right text-[15pt] font-bold tracking-[0.1em] mb-[20mm]">
                         {extractedData.issueDate}
                       </div>
 
-                      {/* 하단 업체 정보 및 계인 마크는 미리보기에서 제외 (사용자 요청) */}
+                      {/* 하단 업체 정보 및 계인 마크 생략 유지 */}
                     </div>
                   </div>
 
