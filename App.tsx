@@ -1,9 +1,33 @@
-
 import React, { useState, useEffect } from 'react';
 import JSZip from 'jszip';
 import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar, Zap } from 'lucide-react';
 import { HWPXData, ProcessingState, FileInfo } from './types';
 import { parseHWPXContent } from './services/geminiService';
+import { XMLParser, XMLBuilder } from 'fast-xml-parser';
+
+// XML 객체를 재귀적으로 탐색하여 텍스트 값을 정밀하게 치환하는 함수
+const replaceTextInObject = (obj: any, originalVal: string, currentVal: string) => {
+  if (!obj) return;
+
+  if (typeof obj === 'string') {
+    // 문자열인 경우에만 치환 수행 (내용이 정확히 일치하거나 포함된 경우)
+    return obj.split(originalVal).join(currentVal);
+  }
+
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      obj[i] = replaceTextInObject(obj[i], originalVal, currentVal);
+    }
+  } else if (typeof obj === 'object') {
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        // HWPX의 텍스트 노드는 주로 '#text' 또는 특정 태그 내부의 문자열로 존재함
+        obj[key] = replaceTextInObject(obj[key], originalVal, currentVal);
+      }
+    }
+  }
+  return obj;
+};
 
 const App: React.FC = () => {
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
@@ -102,6 +126,19 @@ const App: React.FC = () => {
       const files = Object.keys(originalZip.files);
       const editableKeys: (keyof HWPXData)[] = ['applicant', 'ssn', 'address', 'servicePeriod', 'serviceContent', 'purpose', 'issueDate'];
 
+      // XML 파서 및 빌더 초기화
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: "@_",
+        preserveOrder: true
+      });
+      const builder = new XMLBuilder({
+        ignoreAttributes: false,
+        attributeNamePrefix: "@_",
+        preserveOrder: true,
+        format: true
+      });
+
       for (const fileName of files) {
         const file = originalZip.file(fileName);
         if (!file) continue;
@@ -109,30 +146,22 @@ const App: React.FC = () => {
         if (fileName.match(/Contents\/section\d+\.xml/i)) {
           let xmlContent = await file.async("string");
 
+          // XML을 객체로 파싱
+          let jsonObj = parser.parse(xmlContent);
+
           editableKeys.forEach((k) => {
             const originalVal = originalExtractedData[k];
             const currentVal = extractedData[k];
 
             if (originalVal && currentVal && originalVal !== currentVal) {
-              if (k === 'address') {
-                const prefixes = ['주소지:', '주소지 :', '주소지: ', '주소지'];
-                let replaced = false;
-                for (const prefix of prefixes) {
-                  const pattern = `${prefix}${originalVal}`;
-                  if (xmlContent.includes(pattern)) {
-                    xmlContent = xmlContent.split(pattern).join(`${prefix}${currentVal}`);
-                    replaced = true;
-                  }
-                }
-                if (!replaced && originalVal !== originalExtractedData.companyAddress) {
-                  xmlContent = xmlContent.split(originalVal).join(currentVal);
-                }
-              } else {
-                xmlContent = xmlContent.split(originalVal).join(currentVal);
-              }
+              // 객체 내부를 재귀적으로 탐색하며 텍스트만 치환
+              jsonObj = replaceTextInObject(jsonObj, originalVal, currentVal);
             }
           });
-          newZip.file(fileName, xmlContent);
+
+          // 다시 XML 문자열로 변환
+          const updatedXml = builder.build(jsonObj);
+          newZip.file(fileName, updatedXml);
         } else {
           const content = await file.async("blob");
           newZip.file(fileName, content);
