@@ -79,15 +79,16 @@ export default async function handler(req: any, res: any) {
     Return JSON only. Extract exactly as written.
     
     Fields:
-    1. applicant: 성명
-    2. ssn: 주민번호
-    3. address: 주소
-    4. servicePeriod: 기간
-    5. serviceContent: 내용
+    Fields:
+    1. applicant: 신청인
+    2. ssn: 주민등록번호
+    3. address: 주소지 (신청인 주소)
+    4. servicePeriod: 용역기간
+    5. serviceContent: 용역내용
     6. purpose: 용도
     7. companyName: 업체명
-    8. businessNo: 사업자번호
-    9. companyAddress: 업체주소
+    8. businessNo: 사업자등록번호
+    9. companyAddress: 주소 (업체 주소)
     10. representative: 대표자
     11. issueDate: 발급일 (e.g. 2025년 12월 30일)
     
