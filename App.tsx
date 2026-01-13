@@ -144,7 +144,8 @@ const App: React.FC = () => {
       const parser = new XMLParser({
         ignoreAttributes: false,
         attributeNamePrefix: "@_",
-        preserveOrder: true
+        preserveOrder: true,
+        trimValues: false // 텍스트 노드의 앞뒤 공백(들여쓰기 등)을 보존하기 위해 트림 기능 비활성화
       });
       const builder = new XMLBuilder({
         ignoreAttributes: false,
