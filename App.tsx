@@ -386,51 +386,51 @@ const App: React.FC = () => {
                       <h1 className="text-[28pt] font-bold inline-block border-b-[1px] border-black pb-2 px-4">해 &nbsp; 촉 &nbsp; 증 &nbsp; 명 &nbsp; 서</h1>
                     </div>
 
-                    <div className="space-y-[10mm] text-[15pt] pl-[15mm] pr-[10mm]">
-                      {/* Grid 기반 정밀 정렬: 레이블(35mm) + 콜론 + 데이터 */}
-                      <div className="grid grid-cols-[35mm_10mm_1fr] items-start">
-                        <div className="whitespace-nowrap">신 &nbsp; 청 &nbsp; 인</div>
+                    <div className="space-y-[12mm] text-[15pt] pl-[15mm] pr-[15mm]">
+                      {/* Grid 기반 정밀 정렬: 레이블(40mm) + 콜론 + 데이터 */}
+                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start">
+                        <div className="whitespace-nowrap flex justify-between"><span>신</span><span>청</span><span>인</span></div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.applicant}</div>
                       </div>
 
-                      <div className="grid grid-cols-[35mm_10mm_1fr] items-center">
+                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start">
                         <div className="whitespace-nowrap">주민등록번호</div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.ssn}</div>
                       </div>
 
-                      <div className="grid grid-cols-[35mm_10mm_1fr] items-start">
-                        <div className="whitespace-nowrap">주 &nbsp; 소 &nbsp; 지</div>
+                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start">
+                        <div className="whitespace-nowrap flex justify-between"><span>주</span><span>소</span><span>지</span></div>
                         <div className="text-center">:</div>
-                        <div className="font-semibold leading-[1.6]">{extractedData.address}</div>
+                        <div className="font-semibold leading-[1.6] break-keep">{extractedData.address}</div>
                       </div>
 
-                      <div className="grid grid-cols-[35mm_10mm_1fr] items-center">
-                        <div className="whitespace-nowrap">용 &nbsp; 역 &nbsp; 기 &nbsp; 간</div>
+                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start">
+                        <div className="whitespace-nowrap flex justify-between"><span>용</span><span>역</span><span>기</span><span>간</span></div>
                         <div className="text-center">:</div>
-                        <div className="font-semibold">{extractedData.servicePeriod}</div>
+                        <div className="font-semibold leading-[1.6] break-keep">{extractedData.servicePeriod}</div>
                       </div>
 
-                      <div className="grid grid-cols-[35mm_10mm_1fr] items-center">
-                        <div className="whitespace-nowrap">용 &nbsp; 역 &nbsp; 내 &nbsp; 용</div>
+                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start">
+                        <div className="whitespace-nowrap flex justify-between"><span>용</span><span>역</span><span>내</span><span>용</span></div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.serviceContent}</div>
                       </div>
 
-                      <div className="grid grid-cols-[35mm_10mm_1fr] items-center">
-                        <div className="whitespace-nowrap">용 &nbsp; &nbsp; &nbsp; &nbsp; 도</div>
+                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start">
+                        <div className="whitespace-nowrap flex justify-between"><span>용</span><span>도</span></div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.purpose}</div>
                       </div>
                     </div>
 
-                    <div className="mt-auto mb-[30mm] flex flex-col items-end pr-[15mm] w-full">
+                    <div className="mt-[50mm] mb-[30mm] flex flex-col items-end pr-[15mm] w-full">
                       <div className="text-[15pt] font-medium mb-[40mm]">
                         위의 사실을 증명합니다.
                       </div>
 
-                      <div className="text-[15pt] font-bold tracking-[0.1em]">
+                      <div className="text-[16pt] font-bold tracking-[0.1em]">
                         {extractedData.issueDate}
                       </div>
 
