@@ -1,6 +1,4 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-
 export const config = {
     maxDuration: 60, // Vercel function timeout (seconds)
 };
@@ -18,6 +16,21 @@ export default async function handler(req: any, res: any) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
         return res.status(500).json({ error: 'API Key not configured on server' });
+    }
+    // Load @google/genai dynamically to avoid top-level import failures
+    let GoogleGenAI: any = null;
+    let Type: any = null;
+    try {
+        const mod = await import('@google/genai');
+        GoogleGenAI = mod.GoogleGenAI ?? mod.default?.GoogleGenAI ?? mod.default ?? mod.GoogleGenAI;
+        Type = mod.Type ?? mod.default?.Type ?? mod.Type;
+        if (!GoogleGenAI || !Type) {
+            console.error('Unexpected @google/genai export shape', Object.keys(mod));
+            return res.status(500).json({ error: 'Server misconfiguration: genai module invalid' });
+        }
+    } catch (impErr: any) {
+        console.error('Failed to import @google/genai in server:', impErr);
+        return res.status(500).json({ error: 'Failed to initialize AI client', details: impErr?.message });
     }
 
     const genAI = new GoogleGenAI(apiKey);
