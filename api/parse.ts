@@ -18,31 +18,31 @@ export default async function handler(req: any, res: any) {
         return res.status(500).json({ error: 'API Key not configured on server' });
     }
     // Load @google/generative-ai (Official SDK)
-    let GoogleGenAIClass: any = null;
+    let GoogleGenerativeAIClass: any = null;
     let SchemaType: any = null;
     try {
         const genaiMod = await import('@google/generative-ai');
 
         // Official SDK ESM export mapping
-        GoogleGenAIClass = genaiMod.GoogleGenAI;
+        GoogleGenerativeAIClass = genaiMod.GoogleGenerativeAI;
         SchemaType = genaiMod.SchemaType;
 
-        if (!GoogleGenAIClass) {
+        if (!GoogleGenerativeAIClass) {
             // Fallback for nested default structures in some bundlers
-            GoogleGenAIClass = genaiMod.default?.GoogleGenAI || genaiMod.default;
+            GoogleGenerativeAIClass = genaiMod.default?.GoogleGenerativeAI || genaiMod.default;
             SchemaType = genaiMod.default?.SchemaType || genaiMod.SchemaType;
         }
 
-        if (typeof GoogleGenAIClass !== 'function') {
-            console.error('Failed to find GoogleGenAI class in @google/generative-ai. Keys:', Object.keys(genaiMod));
-            return res.status(500).json({ error: 'AI SDK initialization failed: Class not found' });
+        if (typeof GoogleGenerativeAIClass !== 'function') {
+            console.error('Failed to find GoogleGenerativeAI class in @google/generative-ai. Keys:', Object.keys(genaiMod));
+            return res.status(500).json({ error: 'AI SDK initialization failed: GoogleGenerativeAI class not found' });
         }
     } catch (impErr: any) {
         console.error('Failed to import @google/generative-ai:', impErr);
         return res.status(500).json({ error: 'Failed to load official AI SDK. Please ensure @google/generative-ai is installed.', details: impErr?.message });
     }
 
-    const genAI = new GoogleGenAIClass(apiKey);
+    const genAI = new GoogleGenerativeAIClass(apiKey);
 
     // Safety check for method existence
     if (typeof genAI.getGenerativeModel !== 'function') {
