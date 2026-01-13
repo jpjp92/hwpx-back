@@ -202,9 +202,19 @@ const App: React.FC = () => {
             }
           });
 
-          // 다시 XML 문자열로 변환하고 선언부 결합
-          const updatedXml = xmlDeclaration + builder.build(jsonObj);
-          newZip.file(fileName, updatedXml);
+          // 다시 XML 문자열로 변환
+          const builderOutput = builder.build(jsonObj);
+
+          // 빌더 출력물에 이미 선언부가 있는지 확인 (중복 방지)
+          let finalXml = "";
+          if (builderOutput.trim().startsWith('<?xml')) {
+            finalXml = builderOutput;
+          } else {
+            // 선언부와 본문 사이에 줄바꿈(\r\n)을 추가하여 HWPX 호환성 극대화
+            finalXml = xmlDeclaration + "\r\n" + builderOutput;
+          }
+
+          newZip.file(fileName, finalXml);
         } else {
           const content = await file.async("blob");
           newZip.file(fileName, content);
