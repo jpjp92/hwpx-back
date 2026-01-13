@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import JSZip from 'jszip';
-import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar, Zap } from 'lucide-react';
+import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar, Zap, FileType } from 'lucide-react';
 import { HWPXData, ProcessingState, FileInfo } from './types';
 import { parseHWPXContent } from './services/geminiService';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
@@ -55,6 +55,31 @@ const App: React.FC = () => {
   });
 
   const [loadingMsg, setLoadingMsg] = useState("문서 구조를 파악하고 있습니다...");
+  const [scale, setScale] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  // 브라우저 크기에 맞춰 A4 미리보기 크기를 자동으로 조절하는 로직
+  useEffect(() => {
+    const updateScale = () => {
+      if (containerRef.current) {
+        // 컨테이너 너비에서 적절한 여백을 뺀 값 기준
+        const containerWidth = containerRef.current.clientWidth - 48;
+        const a4Width = 794; // 약 210mm를 픽셀로 환산 (96dpi 기준)
+        const newScale = Math.min(containerWidth / a4Width, 1);
+        setScale(newScale);
+      }
+    };
+    window.addEventListener('resize', updateScale);
+    // 초기 실행 및 데이터 추출 완료 시 업데이트
+    updateScale();
+    // 약간의 지연 후 재계산 (레이아웃 렌더링 시간 고려)
+    const timer = setTimeout(updateScale, 100);
+    return () => {
+      window.removeEventListener('resize', updateScale);
+      clearTimeout(timer);
+    };
+  }, [extractedData]);
 
   useEffect(() => {
     let interval: any;
@@ -307,87 +332,118 @@ const App: React.FC = () => {
           )}
         </div>
 
-        <div className="lg:col-span-8">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-200 min-h-[900px] p-[80px] relative overflow-hidden">
+        <div className="lg:col-span-8 h-full">
+          <div
+            ref={containerRef}
+            className="bg-[#323639] rounded-2xl shadow-xl border border-slate-800 min-h-[900px] h-full flex flex-col items-center overflow-auto relative p-8 scrollbar-hide focus:outline-none"
+          >
             {!extractedData && !status.isParsing && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 px-12 text-center">
-                <FileText size={80} className="mb-4 opacity-10" />
-                <p className="text-lg font-medium">문서 미리보기가 이곳에 나타납니다</p>
-                <p className="text-sm text-slate-400 mt-2">HWPX 문서를 업로드하면 Gemini 2.5 Flash가 자동으로 분석을 시작합니다.</p>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 px-12 text-center opacity-40">
+                <FileType size={80} strokeWidth={1} className="mb-4" />
+                <h2 className="text-xl font-black text-white uppercase tracking-tight mb-2">실시간 인터랙티브 미리보기</h2>
+                <p className="text-sm text-slate-400 max-w-sm font-medium">
+                  HWPX 원본 데이터를 Gemini가 정밀 분석하여<br />실제 문서와 동일한 레이아웃으로 렌더링합니다.
+                </p>
               </div>
             )}
 
             {status.isParsing && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/95 z-20 backdrop-blur-sm">
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#323639]/95 z-20 backdrop-blur-sm">
                 <div className="relative mb-6">
-                  <Loader2 className="animate-spin text-blue-500" size={64} />
-                  <div className="absolute inset-0 animate-ping opacity-20 bg-blue-400 rounded-full scale-150"></div>
+                  <div className="w-20 h-20 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
+                  <div className="absolute inset-0 animate-ping opacity-20 bg-blue-400 rounded-full scale-125"></div>
                 </div>
-                <p className="text-2xl font-bold text-slate-800">Gemini 2.5 Flash가 분석 중...</p>
-                <p className="text-slate-400 mt-3 font-medium animate-pulse">{loadingMsg}</p>
-                <div className="mt-8 w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-500 animate-[loading_20s_ease-in-out_infinite]"></div>
-                </div>
-                <style dangerouslySetInnerHTML={{
-                  __html: `
-                  @keyframes loading {
-                    0% { width: 0%; }
-                    50% { width: 70%; }
-                    100% { width: 95%; }
-                  }
-                `}} />
+                <p className="text-2xl font-black text-slate-100 uppercase tracking-tight">Gemini 2.5 Flash가 분석 중...</p>
+                <p className="text-slate-400 mt-3 font-medium animate-pulse tracking-wide">{loadingMsg}</p>
               </div>
             )}
 
             {extractedData && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
-                <div className="text-center mb-24">
-                  <h1 className="text-5xl font-extrabold tracking-[20px] text-slate-900 border-b-4 border-slate-900 pb-6 inline-block">
-                    해 촉 증 명 서
-                  </h1>
-                </div>
+              <div
+                className="origin-top transition-transform duration-300 ease-out shadow-2xl mb-12"
+                style={{ transform: `scale(${scale})` }}
+              >
+                <div
+                  ref={previewRef}
+                  className="w-[210mm] bg-white min-h-[297mm] p-[30mm] flex flex-col text-black leading-tight serif-doc relative overflow-hidden select-none"
+                >
+                  {/* Subtle paper grain texture */}
+                  <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]"></div>
 
-                <div className="space-y-6 text-lg">
-                  <div className="flex gap-4">
-                    <span className="w-32 font-bold shrink-0">신청인:</span>
-                    <span className="border-b border-slate-300 flex-1 pb-1">{extractedData.applicant}</span>
-                  </div>
-                  <div className="flex gap-4">
-                    <span className="w-32 font-bold shrink-0">주민등록번호:</span>
-                    <span className="border-b border-slate-300 flex-1 pb-1">{extractedData.ssn}</span>
-                  </div>
-                  <div className="flex gap-4">
-                    <span className="w-32 font-bold shrink-0">주소지:</span>
-                    <span className="border-b border-slate-300 flex-1 pb-1 text-blue-700 font-medium bg-blue-50/30">{extractedData.address}</span>
-                  </div>
-                  <div className="flex gap-4">
-                    <span className="w-32 font-bold shrink-0">용역기간:</span>
-                    <span className="border-b border-slate-300 flex-1 pb-1">{extractedData.servicePeriod}</span>
-                  </div>
-                  <div className="flex gap-4">
-                    <span className="w-32 font-bold shrink-0">용역내용:</span>
-                    <span className="border-b border-slate-300 flex-1 pb-1">{extractedData.serviceContent}</span>
-                  </div>
-                  <div className="flex gap-4">
-                    <span className="w-32 font-bold shrink-0">용도:</span>
-                    <span className="border-b border-slate-300 flex-1 pb-1">{extractedData.purpose}</span>
-                  </div>
-                </div>
+                  <div className="relative flex-1 flex flex-col h-full z-10">
+                    <div className="text-center mt-[20mm] mb-[45mm]">
+                      <h1 className="text-[44pt] font-extrabold tracking-[0.8em] inline-block border-b-4 border-black pb-4 ml-[0.8em]">해촉증명서</h1>
+                    </div>
 
-                <div className="mt-32 text-right">
-                  <p className="text-xl font-medium">위의 사실을 증명합니다.</p>
-                </div>
+                    <div className="space-y-[12mm] text-[18pt] font-medium pl-[10mm]">
+                      <div className="flex gap-4">
+                        <span className="w-56 tracking-[0.6em] flex justify-between pr-8 shrink-0"><span>신</span><span>청</span><span>인</span></span>
+                        <span className="shrink-0">:</span>
+                        <span className="font-bold">{extractedData.applicant}</span>
+                      </div>
+                      <div className="flex gap-4">
+                        <span className="w-56 tracking-[0.1em] flex justify-between pr-8 shrink-0">주민등록번호</span>
+                        <span className="shrink-0">:</span>
+                        <span className="font-bold">{extractedData.ssn}</span>
+                      </div>
+                      <div className="flex gap-4 items-start">
+                        <span className="w-56 tracking-[0.6em] flex justify-between pr-8 shrink-0"><span>주</span><span>소</span><span>지</span></span>
+                        <span className="shrink-0 mt-1">:</span>
+                        <span className="flex-1 leading-snug font-bold">{extractedData.address}</span>
+                      </div>
+                      <div className="flex gap-4">
+                        <span className="w-56 tracking-[0.1em] flex justify-between pr-8 shrink-0">용 역 기 간</span>
+                        <span className="shrink-0">:</span>
+                        <span className="font-bold">{extractedData.servicePeriod}</span>
+                      </div>
+                      <div className="flex gap-4">
+                        <span className="w-56 tracking-[0.1em] flex justify-between pr-8 shrink-0">용 역 내 용</span>
+                        <span className="shrink-0">:</span>
+                        <span className="font-bold">{extractedData.serviceContent}</span>
+                      </div>
+                      <div className="flex gap-4">
+                        <span className="w-56 tracking-[1em] flex justify-between pr-8 shrink-0"><span>용</span><span>도</span></span>
+                        <span className="shrink-0">:</span>
+                        <span className="font-bold">{extractedData.purpose}</span>
+                      </div>
+                    </div>
 
-                <div className="mt-40 text-center">
-                  <p className="text-3xl font-bold tracking-widest bg-amber-50 px-6 py-2 rounded-xl inline-block border border-amber-100 shadow-sm text-amber-900">
-                    {extractedData.issueDate}
-                  </p>
-                </div>
+                    <div className="mt-auto mb-[25mm]">
+                      <div className="text-right pr-[10mm] text-[20pt] font-bold mb-[20mm]">
+                        위의 사실을 증명합니다.
+                      </div>
 
-                <div className="absolute top-0 left-0 w-24 h-24 border-t-2 border-l-2 border-slate-100"></div>
-                <div className="absolute top-0 right-0 w-24 h-24 border-t-2 border-r-2 border-slate-100"></div>
-                <div className="absolute bottom-0 left-0 w-24 h-24 border-b-2 border-l-2 border-slate-100"></div>
-                <div className="absolute bottom-0 right-0 w-24 h-24 border-b-2 border-r-2 border-slate-100"></div>
+                      <div className="text-center text-[22pt] font-black tracking-[0.2em] mb-[30mm]">
+                        {extractedData.issueDate}
+                      </div>
+
+                      <div className="flex flex-col items-end pr-[10mm] space-y-2">
+                        <div className="flex items-end gap-12">
+                          <div className="text-[18pt] font-bold">
+                            <div className="flex justify-between w-48 border-b border-white"><span>업</span><span>체</span><span>명</span> <span className="font-medium">: {extractedData.companyName}</span></div>
+                            <div className="flex justify-between w-48 mt-1 border-b border-white"><span>대</span><span>표</span><span>자</span> <span className="font-medium">: {extractedData.representative} (인)</span></div>
+                          </div>
+                          <div className="w-24 h-24 border-2 border-red-500 rounded-full flex items-center justify-center text-red-500 font-black text-xl rotate-12 opacity-80 border-dashed">
+                            계인생략
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Corner Marks */}
+                  <div className="absolute top-[10mm] left-[10mm] w-[15mm] h-[15mm] border-t-2 border-l-2 border-slate-100"></div>
+                  <div className="absolute top-[10mm] right-[10mm] w-[15mm] h-[15mm] border-t-2 border-r-2 border-slate-100"></div>
+                  <div className="absolute bottom-[10mm] left-[10mm] w-[15mm] h-[15mm] border-b-2 border-l-2 border-slate-100"></div>
+                  <div className="absolute bottom-[10mm] right-[10mm] w-[15mm] h-[15mm] border-b-2 border-r-2 border-slate-100"></div>
+                </div>
+              </div>
+            )}
+
+            {extractedData && (
+              <div className="absolute bottom-8 right-8 bg-blue-600 text-white px-5 py-2.5 rounded-full flex items-center gap-3 text-xs font-black shadow-2xl z-30 animate-in fade-in slide-in-from-bottom-4 shadow-blue-500/40">
+                <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-ping"></div>
+                LIVE SYNC ACTIVE (A4 ISO 216)
               </div>
             )}
           </div>
