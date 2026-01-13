@@ -170,7 +170,8 @@ const App: React.FC = () => {
         ignoreAttributes: false,
         attributeNamePrefix: "@_",
         preserveOrder: true,
-        trimValues: false // 텍스트 노드의 앞뒤 공백(들여쓰기 등)을 보존하기 위해 트림 기능 비활성화
+        trimValues: false, // 텍스트 노드의 앞뒤 공백(들여쓰기 등)을 보존하기 위해 트림 기능 비활성화
+        parseTagValue: false // 숫자 형태의 텍스트를 Number로 자동 변환하지 않도록 설정 (주민등록번호 등 보호)
       });
       const builder = new XMLBuilder({
         ignoreAttributes: false,
