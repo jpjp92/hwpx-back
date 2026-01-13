@@ -6,23 +6,34 @@ import { parseHWPXContent } from './services/geminiService';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 // XML 객체를 재귀적으로 탐색하여 텍스트 값을 정밀하게 치환하는 함수
-const replaceTextInObject = (obj: any, originalVal: string, currentVal: string) => {
-  if (!obj) return;
+const replaceTextInObject = (obj: any, originalVal: string, currentVal: string): any => {
+  // null 또는 undefined는 그대로 반환하여 구조를 유지함
+  if (obj === null || obj === undefined) return obj;
 
-  if (typeof obj === 'string') {
-    // 문자열인 경우에만 치환 수행 (내용이 정확히 일치하거나 포함된 경우)
+  const objType = typeof obj;
+
+  if (objType === 'string') {
+    // 문자열인 경우에만 치환 수행
     return obj.split(originalVal).join(currentVal);
   }
 
   if (Array.isArray(obj)) {
+    // 배열인 경우 모든 요소를 순회하며 치환
     for (let i = 0; i < obj.length; i++) {
-      obj[i] = replaceTextInObject(obj[i], originalVal, currentVal);
+      const result = replaceTextInObject(obj[i], originalVal, currentVal);
+      // 결과가 undefined가 아닌 경우에만 할당 (방어적 처리)
+      if (result !== undefined) {
+        obj[i] = result;
+      }
     }
-  } else if (typeof obj === 'object') {
+  } else if (objType === 'object') {
+    // 객체인 경우 모든 속성을 순회하며 치환
     for (const key in obj) {
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        // HWPX의 텍스트 노드는 주로 '#text' 또는 특정 태그 내부의 문자열로 존재함
-        obj[key] = replaceTextInObject(obj[key], originalVal, currentVal);
+        const result = replaceTextInObject(obj[key], originalVal, currentVal);
+        if (result !== undefined) {
+          obj[key] = result;
+        }
       }
     }
   }
