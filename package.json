@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "^1.35.0",
+    "@google/generative-ai": "^0.24.1",
     "fast-xml-parser": "^5.3.3",
     "jszip": "^3.10.1",
     "lucide-react": "^0.562.0",

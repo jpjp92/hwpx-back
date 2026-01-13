@@ -17,32 +17,37 @@ export default async function handler(req: any, res: any) {
     if (!apiKey) {
         return res.status(500).json({ error: 'API Key not configured on server' });
     }
-    // Load @google/genai dynamically with robust member extraction
+    // Load @google/generative-ai (Official SDK)
     let GoogleGenAIClass: any = null;
-    let GenAIType: any = null;
+    let SchemaType: any = null;
     try {
-        const mod = await import('@google/genai');
+        const genaiMod = await import('@google/generative-ai');
 
-        // Comprehensive check for the GoogleGenAI class
-        GoogleGenAIClass = mod.GoogleGenAI || mod.default?.GoogleGenAI || (typeof mod.default === 'function' ? mod.default : null);
-        GenAIType = mod.Type || mod.default?.Type;
+        // Official SDK ESM export mapping
+        GoogleGenAIClass = genaiMod.GoogleGenAI;
+        SchemaType = genaiMod.SchemaType;
 
-        if (!GoogleGenAIClass || typeof GoogleGenAIClass !== 'function') {
-            console.error('Failed to find GoogleGenAI constructor. Module keys:', Object.keys(mod));
-            if (mod.default) console.error('Default export keys:', Object.keys(mod.default));
-            return res.status(500).json({ error: 'Server misconfiguration: GoogleGenAI class not found' });
+        if (!GoogleGenAIClass) {
+            // Fallback for nested default structures in some bundlers
+            GoogleGenAIClass = genaiMod.default?.GoogleGenAI || genaiMod.default;
+            SchemaType = genaiMod.default?.SchemaType || genaiMod.SchemaType;
+        }
+
+        if (typeof GoogleGenAIClass !== 'function') {
+            console.error('Failed to find GoogleGenAI class in @google/generative-ai. Keys:', Object.keys(genaiMod));
+            return res.status(500).json({ error: 'AI SDK initialization failed: Class not found' });
         }
     } catch (impErr: any) {
-        console.error('Failed to import @google/genai in server:', impErr);
-        return res.status(500).json({ error: 'Failed to initialize AI client', details: impErr?.message });
+        console.error('Failed to import @google/generative-ai:', impErr);
+        return res.status(500).json({ error: 'Failed to load official AI SDK. Please ensure @google/generative-ai is installed.', details: impErr?.message });
     }
 
     const genAI = new GoogleGenAIClass(apiKey);
 
     // Safety check for method existence
     if (typeof genAI.getGenerativeModel !== 'function') {
-        console.error('genAI instance does not have getGenerativeModel method. Proto:', Object.getPrototypeOf(genAI));
-        return res.status(500).json({ error: 'AI Client initialization failed: Method missing' });
+        console.error('genAI instance missing getGenerativeModel. SDK mismatch?');
+        return res.status(500).json({ error: 'AI Client initialization failed: Method missing in official SDK instance' });
     }
 
     const model = genAI.getGenerativeModel({
@@ -50,19 +55,19 @@ export default async function handler(req: any, res: any) {
         generationConfig: {
             responseMimeType: "application/json",
             responseSchema: {
-                type: GenAIType?.OBJECT || 'OBJECT',
+                type: SchemaType?.OBJECT || 'OBJECT',
                 properties: {
-                    applicant: { type: GenAIType?.STRING || 'STRING' },
-                    ssn: { type: GenAIType?.STRING || 'STRING' },
-                    address: { type: GenAIType?.STRING || 'STRING' },
-                    servicePeriod: { type: GenAIType?.STRING || 'STRING' },
-                    serviceContent: { type: GenAIType?.STRING || 'STRING' },
-                    purpose: { type: GenAIType?.STRING || 'STRING' },
-                    companyName: { type: GenAIType?.STRING || 'STRING' },
-                    businessNo: { type: GenAIType?.STRING || 'STRING' },
-                    companyAddress: { type: GenAIType?.STRING || 'STRING' },
-                    representative: { type: GenAIType?.STRING || 'STRING' },
-                    issueDate: { type: GenAIType?.STRING || 'STRING' },
+                    applicant: { type: SchemaType?.STRING || 'STRING' },
+                    ssn: { type: SchemaType?.STRING || 'STRING' },
+                    address: { type: SchemaType?.STRING || 'STRING' },
+                    servicePeriod: { type: SchemaType?.STRING || 'STRING' },
+                    serviceContent: { type: SchemaType?.STRING || 'STRING' },
+                    purpose: { type: SchemaType?.STRING || 'STRING' },
+                    companyName: { type: SchemaType?.STRING || 'STRING' },
+                    businessNo: { type: SchemaType?.STRING || 'STRING' },
+                    companyAddress: { type: SchemaType?.STRING || 'STRING' },
+                    representative: { type: SchemaType?.STRING || 'STRING' },
+                    issueDate: { type: SchemaType?.STRING || 'STRING' },
                 },
                 required: ["applicant", "ssn", "address", "servicePeriod", "serviceContent", "purpose", "companyName", "businessNo", "companyAddress", "representative", "issueDate"]
             }
