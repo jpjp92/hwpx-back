@@ -30,6 +30,9 @@ const replaceTextInObject = (obj: any, originalVal: string, currentVal: string):
     // 객체인 경우 모든 속성을 순회하며 치환
     for (const key in obj) {
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        // HWPX의 구조를 결정하는 속성(Attribute, @_로 시작)은 치환에서 제외하여 서식 깨짐 방지
+        if (key.startsWith('@_')) continue;
+
         const result = replaceTextInObject(obj[key], originalVal, currentVal);
         if (result !== undefined) {
           obj[key] = result;
@@ -147,7 +150,7 @@ const App: React.FC = () => {
         ignoreAttributes: false,
         attributeNamePrefix: "@_",
         preserveOrder: true,
-        format: true
+        format: false // HWPX 내부의 미세 공백 구조 보존을 위해 포맷팅 비활성화
       });
 
       for (const fileName of files) {
