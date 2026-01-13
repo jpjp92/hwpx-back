@@ -186,6 +186,10 @@ const App: React.FC = () => {
         if (fileName.match(/Contents\/section\d+\.xml/i)) {
           let xmlContent = await file.async("string");
 
+          // 원본 XML 선언부 추출 (<?xml ... ?>)
+          const xmlDeclarationMatch = xmlContent.match(/^<\?xml.*?\?>/);
+          const xmlDeclaration = xmlDeclarationMatch ? xmlDeclarationMatch[0] : '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>';
+
           // XML을 객체로 파싱
           let jsonObj = parser.parse(xmlContent);
 
@@ -194,13 +198,12 @@ const App: React.FC = () => {
             const currentVal = extractedData[k];
 
             if (originalVal && currentVal && originalVal !== currentVal) {
-              // 객체 내부를 재귀적으로 탐색하며 텍스트만 치환
               jsonObj = replaceTextInObject(jsonObj, originalVal, currentVal);
             }
           });
 
-          // 다시 XML 문자열로 변환
-          const updatedXml = builder.build(jsonObj);
+          // 다시 XML 문자열로 변환하고 선언부 결합
+          const updatedXml = xmlDeclaration + builder.build(jsonObj);
           newZip.file(fileName, updatedXml);
         } else {
           const content = await file.async("blob");
@@ -387,38 +390,38 @@ const App: React.FC = () => {
                     </div>
 
                     <div className="space-y-[12mm] text-[15pt] pl-[15mm] pr-[15mm]">
-                      {/* Grid 기반 정밀 정렬: 레이블(40mm) + 콜론 + 데이터 */}
-                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start">
-                        <div className="whitespace-nowrap flex justify-between"><span>신</span><span>청</span><span>인</span></div>
+                      {/* Grid 기반 정밀 정렬: 레이블(40mm) + 콜론 + 데이터 (동일한 leading으로 베이스라인 일치) */}
+                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
+                        <div className="whitespace-nowrap flex justify-between h-full"><span>신</span><span>청</span><span>인</span></div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.applicant}</div>
                       </div>
 
-                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start">
+                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
                         <div className="whitespace-nowrap">주민등록번호</div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.ssn}</div>
                       </div>
 
-                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start">
+                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
                         <div className="whitespace-nowrap flex justify-between"><span>주</span><span>소</span><span>지</span></div>
                         <div className="text-center">:</div>
-                        <div className="font-semibold leading-[1.6] break-keep">{extractedData.address}</div>
+                        <div className="font-semibold">{extractedData.address}</div>
                       </div>
 
-                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start">
+                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
                         <div className="whitespace-nowrap flex justify-between"><span>용</span><span>역</span><span>기</span><span>간</span></div>
                         <div className="text-center">:</div>
-                        <div className="font-semibold leading-[1.6] break-keep">{extractedData.servicePeriod}</div>
+                        <div className="font-semibold">{extractedData.servicePeriod}</div>
                       </div>
 
-                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start">
+                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
                         <div className="whitespace-nowrap flex justify-between"><span>용</span><span>역</span><span>내</span><span>용</span></div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.serviceContent}</div>
                       </div>
 
-                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start">
+                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
                         <div className="whitespace-nowrap flex justify-between"><span>용</span><span>도</span></div>
                         <div className="text-center">:</div>
                         <div className="font-semibold">{extractedData.purpose}</div>
