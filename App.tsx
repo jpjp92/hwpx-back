@@ -445,7 +445,7 @@ const App: React.FC = () => {
               {/* Preview Content */}
               {extractedData && (
                 <div
-                  className="origin-top transition-transform duration-300 shadow-xl ring-1 ring-slate-900/5 mb-12"
+                  className="origin-top transition-transform duration-300 shadow-xl ring-1 ring-slate-900/5 mb-6"
                   style={{ transform: `scale(${scale})` }}
                 >
                   <div
