@@ -17,42 +17,52 @@ export default async function handler(req: any, res: any) {
     if (!apiKey) {
         return res.status(500).json({ error: 'API Key not configured on server' });
     }
-    // Load @google/genai dynamically to avoid top-level import failures
-    let GoogleGenAI: any = null;
-    let Type: any = null;
+    // Load @google/genai dynamically with robust member extraction
+    let GoogleGenAIClass: any = null;
+    let GenAIType: any = null;
     try {
         const mod = await import('@google/genai');
-        GoogleGenAI = mod.GoogleGenAI ?? mod.default?.GoogleGenAI ?? mod.default ?? mod.GoogleGenAI;
-        Type = mod.Type ?? mod.default?.Type ?? mod.Type;
-        if (!GoogleGenAI || !Type) {
-            console.error('Unexpected @google/genai export shape', Object.keys(mod));
-            return res.status(500).json({ error: 'Server misconfiguration: genai module invalid' });
+
+        // Comprehensive check for the GoogleGenAI class
+        GoogleGenAIClass = mod.GoogleGenAI || mod.default?.GoogleGenAI || (typeof mod.default === 'function' ? mod.default : null);
+        GenAIType = mod.Type || mod.default?.Type;
+
+        if (!GoogleGenAIClass || typeof GoogleGenAIClass !== 'function') {
+            console.error('Failed to find GoogleGenAI constructor. Module keys:', Object.keys(mod));
+            if (mod.default) console.error('Default export keys:', Object.keys(mod.default));
+            return res.status(500).json({ error: 'Server misconfiguration: GoogleGenAI class not found' });
         }
     } catch (impErr: any) {
         console.error('Failed to import @google/genai in server:', impErr);
         return res.status(500).json({ error: 'Failed to initialize AI client', details: impErr?.message });
     }
 
-    const genAI = new GoogleGenAI(apiKey);
-    // Use the same model as in geminiService.ts
+    const genAI = new GoogleGenAIClass(apiKey);
+
+    // Safety check for method existence
+    if (typeof genAI.getGenerativeModel !== 'function') {
+        console.error('genAI instance does not have getGenerativeModel method. Proto:', Object.getPrototypeOf(genAI));
+        return res.status(500).json({ error: 'AI Client initialization failed: Method missing' });
+    }
+
     const model = genAI.getGenerativeModel({
         model: "gemini-2.5-flash",
         generationConfig: {
             responseMimeType: "application/json",
             responseSchema: {
-                type: Type.OBJECT,
+                type: GenAIType?.OBJECT || 'OBJECT',
                 properties: {
-                    applicant: { type: Type.STRING },
-                    ssn: { type: Type.STRING },
-                    address: { type: Type.STRING },
-                    servicePeriod: { type: Type.STRING },
-                    serviceContent: { type: Type.STRING },
-                    purpose: { type: Type.STRING },
-                    companyName: { type: Type.STRING },
-                    businessNo: { type: Type.STRING },
-                    companyAddress: { type: Type.STRING },
-                    representative: { type: Type.STRING },
-                    issueDate: { type: Type.STRING },
+                    applicant: { type: GenAIType?.STRING || 'STRING' },
+                    ssn: { type: GenAIType?.STRING || 'STRING' },
+                    address: { type: GenAIType?.STRING || 'STRING' },
+                    servicePeriod: { type: GenAIType?.STRING || 'STRING' },
+                    serviceContent: { type: GenAIType?.STRING || 'STRING' },
+                    purpose: { type: GenAIType?.STRING || 'STRING' },
+                    companyName: { type: GenAIType?.STRING || 'STRING' },
+                    businessNo: { type: GenAIType?.STRING || 'STRING' },
+                    companyAddress: { type: GenAIType?.STRING || 'STRING' },
+                    representative: { type: GenAIType?.STRING || 'STRING' },
+                    issueDate: { type: GenAIType?.STRING || 'STRING' },
                 },
                 required: ["applicant", "ssn", "address", "servicePeriod", "serviceContent", "purpose", "companyName", "businessNo", "companyAddress", "representative", "issueDate"]
             }
