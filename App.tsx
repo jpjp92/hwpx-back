@@ -229,7 +229,8 @@ const App: React.FC = () => {
         ignoreAttributes: false,
         attributeNamePrefix: "@_",
         preserveOrder: true,
-        format: false // HWPX 내부의 미세 공백 구조 보존을 위해 포맷팅 비활성화
+        format: false, // HWPX 내부의 미세 공백 구조 보존을 위해 포맷팅 비활성화
+        suppressEmptyNode: true // 빈 태그(self-closing tag)가 <tag></tag>로 확장되지 않고 <tag/>로 유지되도록 설정
       });
 
       for (const fileName of files) {
@@ -264,6 +265,49 @@ const App: React.FC = () => {
             finalXml = builderOutput;
           } else {
             // 선언부와 본문 사이에 줄바꿈(\r\n)을 추가하여 HWPX 호환성 극대화
+            finalXml = xmlDeclaration + "\r\n" + builderOutput;
+          }
+
+          newZip.file(fileName, finalXml);
+
+        } else if (fileName.match(/Contents\/header\.xml/i)) {
+          let xmlContent = await file.async("string");
+          let jsonObj = parser.parse(xmlContent);
+
+          // ID 13: 신청인, 주소지 등 주요 항목 스타일
+          // ID 17: 업체명, 사업자번호 등 하단 항목 스타일
+          // 두 스타일 모두 "라벨 : 값" 형태이므로 50mm(약 14173 HWPUNIT) 내어쓰기 적용
+          const targetStyleIds = ["13", "17"];
+
+          if (jsonObj["hh:head"] && jsonObj["hh:head"]["hh:paraProperties"] && jsonObj["hh:head"]["hh:paraProperties"]["hh:paraPr"]) {
+            const paraPrList = jsonObj["hh:head"]["hh:paraProperties"]["hh:paraPr"];
+
+            // 배열이 아닐 경우(단일 항목) 배열로 처리
+            const paraPrArray = Array.isArray(paraPrList) ? paraPrList : [paraPrList];
+
+            paraPrArray.forEach((paraPr: any) => {
+              if (targetStyleIds.includes(paraPr["@_id"])) {
+                if (paraPr["hh:margin"]) {
+                  // 50mm Hanging Indent (내어쓰기)
+                  // left: 전체 왼쪽 여백 50mm (값의 시작 위치)
+                  // intent: 첫 줄 내어쓰기 -50mm (라벨이 앞으로 튀어나오게)
+                  paraPr["hh:margin"]["@_left"] = "14173";
+                  paraPr["hh:margin"]["@_intent"] = "-14173";
+                }
+              }
+            });
+          }
+
+          const builderOutput = builder.build(jsonObj);
+
+          // XML 선언부 처리
+          const xmlDeclarationMatch = xmlContent.match(/^<\?xml.*?\?>/);
+          const xmlDeclaration = xmlDeclarationMatch ? xmlDeclarationMatch[0] : '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>';
+
+          let finalXml = "";
+          if (builderOutput.trim().startsWith('<?xml')) {
+            finalXml = builderOutput;
+          } else {
             finalXml = xmlDeclaration + "\r\n" + builderOutput;
           }
 
@@ -430,17 +474,14 @@ const App: React.FC = () => {
 
             <div
               ref={containerRef}
-              className="mt-4 flex-1 flex items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6 min-h-[760px] overflow-hidden relative"
+              className="mt-4 flex-1 flex flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6 min-h-[600px] overflow-y-auto overflow-x-hidden relative scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent"
             >
               {/* Loading Overlay - Simplified */}
               {(status.isUnzipping || status.isParsing) && (
                 <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/85 backdrop-blur-sm">
                   <Loader2 className="animate-spin text-blue-600" size={28} />
                   <p className="mt-3 text-sm font-semibold text-slate-800">
-                    {status.isUnzipping ? "문서 압축 해제 중..." : "AI 데이터 분석 중..."}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {status.isParsing ? loadingMsg : "문서 구조를 확인하고 있습니다."}
+                    문서를 불러오는 중입니다.
                   </p>
                 </div>
               )}
@@ -460,8 +501,11 @@ const App: React.FC = () => {
               {/* Preview Content */}
               {extractedData && (
                 <div
-                  className="origin-top transition-transform duration-300 shadow-xl ring-1 ring-slate-900/5 mb-6"
-                  style={{ transform: `scale(${scale})` }}
+                  className="origin-top transition-transform duration-300 shadow-xl ring-1 ring-slate-900/5 mb-1"
+                  style={{
+                    transform: `scale(${scale})`,
+                    height: `calc((297mm * ${scale}) + 40px)`
+                  }}
                 >
                   <div
                     ref={previewRef}
@@ -483,7 +527,7 @@ const App: React.FC = () => {
                           <div className="font-semibold">{extractedData.applicant}</div>
                         </div>
                         <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                          <div className="whitespace-nowrap">주민등록번호</div>
+                          <div className="whitespace-nowrap">주 민 등 록 번 호</div>
                           <div className="text-center">:</div>
                           <div className="font-semibold">{extractedData.ssn}</div>
                         </div>
