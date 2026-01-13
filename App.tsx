@@ -5,6 +5,58 @@ import { HWPXData, ProcessingState, FileInfo } from './types';
 import { parseHWPXContent } from './services/geminiService';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
+// ============================================================================
+// 공통 UI 컴포넌트 (일관성 있는 디자인 시스템)
+// ============================================================================
+
+const Card: React.FC<React.PropsWithChildren<{ className?: string }>> = ({ className = "", children }) => (
+  <section className={`bg-white rounded-2xl border border-slate-200 shadow-sm ${className}`}>
+    {children}
+  </section>
+);
+
+const SectionHeader: React.FC<{
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode
+}> = ({ title, subtitle, right }) => (
+  <div className="flex items-start justify-between gap-3">
+    <div>
+      <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+      {subtitle && <p className="mt-1 text-sm text-slate-500 leading-relaxed">{subtitle}</p>}
+    </div>
+    {right}
+  </div>
+);
+
+const Button: React.FC<
+  React.PropsWithChildren<{
+    variant?: "primary" | "secondary";
+    onClick?: () => void;
+    disabled?: boolean;
+    className?: string;
+  }>
+> = ({ variant = "secondary", disabled, className = "", children, ...props }) => {
+  const base =
+    "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2";
+  const styles =
+    variant === "primary"
+      ? "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400 disabled:bg-blue-300"
+      : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 focus:ring-slate-300 disabled:text-slate-300";
+  return (
+    <button
+      {...props}
+      disabled={disabled}
+      className={`${base} ${styles} ${disabled ? "cursor-not-allowed" : ""} ${className}`}
+    >
+      {children}
+    </button>
+  );
+};
+
+// ============================================================================
+
+
 // XML 객체를 재귀적으로 탐색하여 텍스트 값을 정밀하게 치환하는 함수
 const replaceTextInObject = (obj: any, originalVal: string, currentVal: string): any => {
   // null 또는 undefined는 그대로 반환하여 구조를 유지함
@@ -235,236 +287,235 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-8 flex flex-col items-center">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex flex-col items-center">
       <header className="w-full max-w-7xl mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <FileText className="text-blue-600" /> HWPX AI 스마트 편집기
+            <FileText className="text-blue-600" /> 한글문서 편집기
           </h1>
-          <p className="text-slate-500 text-sm flex items-center gap-1">
-            해촉증명서 데이터 치환 시스템 <span className="text-blue-400 font-bold ml-2 flex items-center gap-0.5"><Zap size={12} /> 데모 테스트 </span>
+          <p className="text-slate-500 text-sm mt-1 ml-1">
+            해촉증명서 데이터 치환 시스템
           </p>
         </div>
 
         {extractedData && (
           <div className="flex gap-2">
-            <button
-              onClick={resetChanges}
-              className="px-4 py-2 bg-white text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2 text-sm font-medium"
-            >
+            <Button variant="secondary" onClick={resetChanges}>
               <RotateCcw size={16} /> 초기화
-            </button>
-            <button
-              onClick={downloadUpdatedHWPX}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-bold shadow-lg shadow-blue-200"
-            >
-              <Save size={18} /> 수정된 HWPX 다운로드
-            </button>
+            </Button>
+            <Button variant="primary" onClick={downloadUpdatedHWPX}>
+              <Save size={18} /> HWPX 다운로드
+            </Button>
           </div>
         )}
       </header>
 
       <main className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-4 space-y-6">
-          <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">1. 문서 업로드</h2>
-              <div className="group relative">
-                <Info size={14} className="text-slate-300 cursor-help" />
-                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30">
-                  .hwp 구버전은 지원하지 않습니다. 한글에서 'HWPX'로 변환 후 사용해 주세요.
+          <Card className="p-5">
+            <SectionHeader
+              title="1. 문서 업로드"
+              right={
+                <div className="group relative">
+                  <Info size={14} className="text-slate-300 cursor-help" />
+                  <div className="absolute right-0 bottom-full mb-2 w-64 p-2 bg-slate-800 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30">
+                    .hwpx 형식만 지원하며, .hwp는 한글에서 HWPX로 변환 후 업로드합니다.
+                  </div>
                 </div>
-              </div>
+              }
+            />
+
+            <div className="mt-4">
+              {!fileInfo ? (
+                <div className="relative border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-white hover:border-blue-400 transition-colors cursor-pointer">
+                  <input type="file" accept=".hwpx" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-50 text-slate-500 mb-3">
+                    <Upload size={22} />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-800">HWPX 파일을 선택하세요</p>
+                  <p className="mt-1 text-xs text-slate-500">드래그 앤 드롭 또는 클릭하여 업로드</p>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white">
+                    <FileText size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{fileInfo.name}</p>
+                    <p className="text-xs text-slate-500">{(fileInfo.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                  {status.isParsing ? (
+                    <Loader2 className="animate-spin text-blue-600" size={18} />
+                  ) : (
+                    <CheckCircle2 className="text-emerald-500" size={18} />
+                  )}
+                </div>
+              )}
+
+              {status.error && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-sm text-red-700">
+                  <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{status.error}</span>
+                </div>
+              )}
             </div>
-
-            {!fileInfo ? (
-              <div className="relative border-2 border-dashed border-slate-200 rounded-xl p-10 flex flex-col items-center justify-center bg-slate-50 hover:border-blue-300 hover:bg-blue-50 transition-all cursor-pointer">
-                <input type="file" accept=".hwpx" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
-                <Upload className="text-slate-300 mb-2" size={32} />
-                <p className="text-sm text-slate-600 font-medium text-center">HWPX 파일을 선택하세요</p>
-              </div>
-            ) : (
-              <div className="flex items-center gap-4 p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                <div className="bg-blue-500 p-2 rounded-lg text-white"><FileText size={20} /></div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-slate-800 truncate">{fileInfo.name}</p>
-                  <p className="text-xs text-slate-500">{(fileInfo.size / 1024).toFixed(1)} KB</p>
-                </div>
-                {status.isParsing ? (
-                  <Loader2 className="animate-spin text-blue-500" size={18} />
-                ) : (
-                  <CheckCircle2 className="text-green-500" size={18} />
-                )}
-              </div>
-            )}
-
-            {status.error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-100 text-red-600 rounded-lg flex items-start gap-2 text-xs leading-relaxed">
-                <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                <span>{status.error}</span>
-              </div>
-            )}
-          </section>
+          </Card>
 
           {extractedData && (
-            <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6 animate-in fade-in slide-in-from-left-4 duration-500">
-              <div>
-                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <Edit3 size={16} className="text-blue-500" /> 2. 증명서 내용 수정
-                </h2>
-                <div className="space-y-3">
-                  {[
-                    { id: 'applicant', label: '신청인' },
-                    { id: 'ssn', label: '주민등록번호' },
-                    { id: 'address', label: '주소지' },
-                    { id: 'servicePeriod', label: '용역기간' },
-                    { id: 'serviceContent', label: '용역내용' },
-                    { id: 'purpose', label: '용도' },
-                    { id: 'issueDate', label: '증명서 발급일', icon: <Calendar size={14} className="inline mr-1" /> },
-                  ].map((field) => (
-                    <div key={field.id} className="group">
-                      <label className="block text-[11px] font-bold text-slate-400 mb-1 group-focus-within:text-blue-500 transition-colors">
-                        {field.icon}{field.label}
-                      </label>
-                      <input
-                        type="text"
-                        value={extractedData[field.id as keyof HWPXData]}
-                        onChange={(e) => handleDataChange(field.id as keyof HWPXData, e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm outline-none font-medium"
-                      />
-                    </div>
-                  ))}
-                </div>
+            <Card className="p-5 animate-in fade-in slide-in-from-left-4 duration-500">
+              <SectionHeader
+                title="2. 증명서 내용 수정"
+                subtitle="미리보기는 입력값과 연동되며, 다운로드 시 원문 구조를 유지한 채 텍스트만 치환됩니다."
+              />
+
+              <div className="mt-5 space-y-3">
+                {[
+                  { id: 'applicant', label: '신청인' },
+                  { id: 'ssn', label: '주민등록번호' },
+                  { id: 'address', label: '주소지' },
+                  { id: 'servicePeriod', label: '용역기간' },
+                  { id: 'serviceContent', label: '용역내용' },
+                  { id: 'purpose', label: '용도' },
+                  { id: 'issueDate', label: '증명서 발급일' },
+                ].map((field) => (
+                  <div key={field.id}>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                      {field.label}
+                    </label>
+                    <input
+                      type="text"
+                      value={extractedData[field.id as keyof HWPXData]}
+                      onChange={(e) => handleDataChange(field.id as keyof HWPXData, e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition"
+                    />
+                  </div>
+                ))}
               </div>
 
-              <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
-                <p className="text-[11px] text-amber-700 leading-relaxed font-medium">
-                  💡 발급 날짜와 신청인 정보를 수정할 수 있습니다. 하단 업체 정보는 원본 데이터가 유지됩니다.
-                </p>
+              <div className="mt-5 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+                입력값은 치환 대상 텍스트에만 적용되며, 차트/표/서식 등 문서 구조는 변경되지 않습니다.
               </div>
-            </section>
+            </Card>
           )}
         </div>
 
         <div className="lg:col-span-8 h-full">
-          <div
-            ref={containerRef}
-            className="flex flex-col h-full min-h-[800px] bg-slate-100 rounded-2xl shadow-sm overflow-hidden relative border border-slate-200 p-8 items-center justify-center"
-          >
-            {/* Loading Overlay */}
-            {(status.isUnzipping || status.isParsing) && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/90 z-50 backdrop-blur-sm transition-all duration-500">
-                <div className="w-full max-w-md px-8 flex flex-col items-center">
-                  <div className="relative mb-8">
-                    <div className="w-20 h-20 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin"></div>
-                    <div className="absolute inset-0 animate-ping opacity-20 bg-blue-500 rounded-full scale-125"></div>
+          <Card className="p-5 h-full flex flex-col">
+            <SectionHeader
+              title="2. 문서 미리보기"
+              right={
+                <div className="group relative">
+                  <Info size={14} className="text-slate-300 cursor-help" />
+                  <div className="absolute right-0 bottom-full mb-2 w-64 p-2 bg-slate-800 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30">
+                    업로드한 문서의 핵심 텍스트가 치환된 결과를 A4 기준으로 확인합니다.
                   </div>
+                </div>
+              }
+            />
 
-                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mb-4">
-                    <div className="bg-blue-600 h-full w-full origin-left animate-[loading-bar_1.5s_infinite_ease-in-out]"></div>
-                  </div>
-
-                  <p className="text-2xl font-black text-slate-800 uppercase tracking-tight">
+            <div
+              ref={containerRef}
+              className="mt-4 flex-1 flex items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6 min-h-[760px] overflow-hidden relative"
+            >
+              {/* Loading Overlay - Simplified */}
+              {(status.isUnzipping || status.isParsing) && (
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/85 backdrop-blur-sm">
+                  <Loader2 className="animate-spin text-blue-600" size={28} />
+                  <p className="mt-3 text-sm font-semibold text-slate-800">
                     {status.isUnzipping ? "문서 압축 해제 중..." : "AI 데이터 분석 중..."}
                   </p>
-                  <p className="text-slate-500 mt-2 font-medium animate-pulse tracking-wide h-6">
-                    {status.isParsing ? loadingMsg : "HWPX 파일 구조를 탐색하고 있습니다."}
+                  <p className="mt-1 text-sm text-slate-500">
+                    {status.isParsing ? loadingMsg : "문서 구조를 확인하고 있습니다."}
                   </p>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Placeholder (Empty State) */}
-            {!fileInfo && !status.isParsing && !status.isUnzipping && (
-              <div className="text-center space-y-4 opacity-50 select-none">
-                <div className="w-24 h-24 bg-white rounded-3xl mx-auto flex items-center justify-center shadow-sm border border-slate-200">
-                  <FileType size={40} className="text-slate-400" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-600">실시간 인터랙티브 미리보기</h3>
-                  <p className="text-sm text-slate-500 mt-1">HWPX 원본 데이터를 Gemini가 정밀 분석하여<br />실제 문서와 동일한 레이아웃으로 렌더링합니다.</p>
-                </div>
-              </div>
-            )}
-
-            {/* Preview Content */}
-            {extractedData && (
-              <div
-                className="origin-top transition-transform duration-300 shadow-xl ring-1 ring-slate-900/5 mb-12"
-                style={{ transform: `scale(${scale})` }}
-              >
-                <div
-                  ref={previewRef}
-                  className="w-[210mm] bg-white min-h-[297mm] p-[30mm] flex flex-col text-black leading-tight serif-doc relative overflow-hidden select-none"
-                >
-                  {/* Paper Texture */}
-                  <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]"></div>
-
-                  {/* Content */}
-                  <div className="relative flex-1 flex flex-col h-full z-10">
-                    <div className="text-center mt-[20mm] mb-[45mm]">
-                      <h1 className="text-[28pt] font-bold inline-block border-b-[1px] border-black pb-2 px-4">해 &nbsp; 촉 &nbsp; 증 &nbsp; 명 &nbsp; 서</h1>
-                    </div>
-
-                    <div className="space-y-[12mm] text-[15pt] pl-[15mm] pr-[15mm]">
-                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                        <div className="whitespace-nowrap flex justify-between h-full"><span>신</span><span>청</span><span>인</span></div>
-                        <div className="text-center">:</div>
-                        <div className="font-semibold">{extractedData.applicant}</div>
-                      </div>
-                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                        <div className="whitespace-nowrap">주민등록번호</div>
-                        <div className="text-center">:</div>
-                        <div className="font-semibold">{extractedData.ssn}</div>
-                      </div>
-                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                        <div className="whitespace-nowrap flex justify-between"><span>주</span><span>소</span><span>지</span></div>
-                        <div className="text-center">:</div>
-                        <div className="font-semibold">{extractedData.address}</div>
-                      </div>
-                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                        <div className="whitespace-nowrap flex justify-between"><span>용</span><span>역</span><span>기</span><span>간</span></div>
-                        <div className="text-center">:</div>
-                        <div className="font-semibold">{extractedData.servicePeriod}</div>
-                      </div>
-                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                        <div className="whitespace-nowrap flex justify-between"><span>용</span><span>역</span><span>내</span><span>용</span></div>
-                        <div className="text-center">:</div>
-                        <div className="font-semibold">{extractedData.serviceContent}</div>
-                      </div>
-                      <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                        <div className="whitespace-nowrap flex justify-between"><span>용</span><span>도</span></div>
-                        <div className="text-center">:</div>
-                        <div className="font-semibold">{extractedData.purpose}</div>
-                      </div>
-                    </div>
-
-                    <div className="mt-[50mm] mb-[30mm] flex flex-col items-end pr-[15mm] w-full">
-                      <div className="text-[15pt] font-medium mb-[40mm]">
-                        위의 사실을 증명합니다.
-                      </div>
-                      <div className="text-[16pt] font-bold tracking-[0.1em]">
-                        {extractedData.issueDate}
-                      </div>
-                    </div>
+              {/* Placeholder (Empty State) */}
+              {!fileInfo && !status.isParsing && !status.isUnzipping && (
+                <div className="w-full h-full flex flex-col items-center justify-center text-center p-8">
+                  <div className="w-16 h-16 bg-slate-50 rounded-xl flex items-center justify-center mb-4">
+                    <FileType size={28} className="text-slate-400" />
                   </div>
-
-                  {/* Corner Marks */}
-                  <div className="absolute top-[10mm] left-[10mm] w-[15mm] h-[15mm] border-t-2 border-l-2 border-slate-100"></div>
-                  <div className="absolute top-[10mm] right-[10mm] w-[15mm] h-[15mm] border-t-2 border-r-2 border-slate-100"></div>
-                  <div className="absolute bottom-[10mm] left-[10mm] w-[15mm] h-[15mm] border-b-2 border-l-2 border-slate-100"></div>
-                  <div className="absolute bottom-[10mm] right-[10mm] w-[15mm] h-[15mm] border-b-2 border-r-2 border-slate-100"></div>
+                  <h3 className="text-sm font-semibold text-slate-700 mb-1">문서 미리보기</h3>
+                  <p className="text-xs text-slate-500">
+                    파일을 업로드하면 이곳에 문서가 표시됩니다.
+                  </p>
                 </div>
-              </div>
-            )}
+              )}
+              {/* Preview Content */}
+              {extractedData && (
+                <div
+                  className="origin-top transition-transform duration-300 shadow-xl ring-1 ring-slate-900/5 mb-12"
+                  style={{ transform: `scale(${scale})` }}
+                >
+                  <div
+                    ref={previewRef}
+                    className="w-[210mm] bg-white min-h-[297mm] p-[30mm] flex flex-col text-black leading-tight serif-doc relative overflow-hidden select-none"
+                  >
+                    {/* Paper Texture */}
+                    <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]"></div>
 
-            {extractedData && (
-              <div className="absolute bottom-8 right-8 bg-blue-600 text-white px-5 py-2.5 rounded-full flex items-center gap-3 text-xs font-black shadow-2xl z-30 animate-in fade-in slide-in-from-bottom-4 shadow-blue-500/40">
-                <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-ping"></div>
-                LIVE SYNC ACTIVE (A4 ISO 216)
-              </div>
-            )}
-          </div>
+                    {/* Content */}
+                    <div className="relative flex-1 flex flex-col h-full z-10">
+                      <div className="text-center mt-[20mm] mb-[45mm]">
+                        <h1 className="text-[28pt] font-bold inline-block border-b-[1px] border-black pb-2 px-4">해 &nbsp; 촉 &nbsp; 증 &nbsp; 명 &nbsp; 서</h1>
+                      </div>
+
+                      <div className="space-y-[12mm] text-[15pt] pl-[15mm] pr-[15mm]">
+                        <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
+                          <div className="whitespace-nowrap flex justify-between h-full"><span>신</span><span>청</span><span>인</span></div>
+                          <div className="text-center">:</div>
+                          <div className="font-semibold">{extractedData.applicant}</div>
+                        </div>
+                        <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
+                          <div className="whitespace-nowrap">주민등록번호</div>
+                          <div className="text-center">:</div>
+                          <div className="font-semibold">{extractedData.ssn}</div>
+                        </div>
+                        <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
+                          <div className="whitespace-nowrap flex justify-between"><span>주</span><span>소</span><span>지</span></div>
+                          <div className="text-center">:</div>
+                          <div className="font-semibold">{extractedData.address}</div>
+                        </div>
+                        <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
+                          <div className="whitespace-nowrap flex justify-between"><span>용</span><span>역</span><span>기</span><span>간</span></div>
+                          <div className="text-center">:</div>
+                          <div className="font-semibold">{extractedData.servicePeriod}</div>
+                        </div>
+                        <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
+                          <div className="whitespace-nowrap flex justify-between"><span>용</span><span>역</span><span>내</span><span>용</span></div>
+                          <div className="text-center">:</div>
+                          <div className="font-semibold">{extractedData.serviceContent}</div>
+                        </div>
+                        <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
+                          <div className="whitespace-nowrap flex justify-between"><span>용</span><span>도</span></div>
+                          <div className="text-center">:</div>
+                          <div className="font-semibold">{extractedData.purpose}</div>
+                        </div>
+                      </div>
+
+                      <div className="mt-[50mm] mb-[30mm] flex flex-col items-end pr-[15mm] w-full">
+                        <div className="text-[15pt] font-medium mb-[40mm]">
+                          위의 사실을 증명합니다.
+                        </div>
+                        <div className="text-[16pt] font-bold tracking-[0.1em]">
+                          {extractedData.issueDate}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Corner Marks */}
+                    <div className="absolute top-[10mm] left-[10mm] w-[15mm] h-[15mm] border-t-2 border-l-2 border-slate-100"></div>
+                    <div className="absolute top-[10mm] right-[10mm] w-[15mm] h-[15mm] border-t-2 border-r-2 border-slate-100"></div>
+                    <div className="absolute bottom-[10mm] left-[10mm] w-[15mm] h-[15mm] border-b-2 border-l-2 border-slate-100"></div>
+                    <div className="absolute bottom-[10mm] right-[10mm] w-[15mm] h-[15mm] border-b-2 border-r-2 border-slate-100"></div>
+                  </div>
+                </div>
+              )}
+
+
+            </div>
+          </Card>
         </div>
       </main>
 
