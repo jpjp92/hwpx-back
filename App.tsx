@@ -137,7 +137,7 @@ const App: React.FC = () => {
     let interval: any;
     if (status.isParsing) {
       const messages = [
-        "Gemini 2.5 Flash가 XML 데이터를 읽고 있습니다...",
+        "XML 데이터를 분석하고 있습니다...",
         "텍스트 영역에서 핵심 정보를 추출 중입니다...",
         "신청인 및 업체 정보를 매핑하고 있습니다...",
         "거의 다 되었습니다. 결과를 정리 중입니다..."
@@ -221,14 +221,14 @@ const App: React.FC = () => {
       const parser = new XMLParser({
         ignoreAttributes: false,
         attributeNamePrefix: "@_",
-        preserveOrder: true,
+        preserveOrder: false, // false로 변경하여 간단한 객체 구조 사용
         trimValues: false, // 텍스트 노드의 앞뒤 공백(들여쓰기 등)을 보존하기 위해 트림 기능 비활성화
         parseTagValue: false // 숫자 형태의 텍스트를 Number로 자동 변환하지 않도록 설정 (주민등록번호 등 보호)
       });
       const builder = new XMLBuilder({
         ignoreAttributes: false,
         attributeNamePrefix: "@_",
-        preserveOrder: true,
+        preserveOrder: false, // parser와 동일하게 설정
         format: false, // HWPX 내부의 미세 공백 구조 보존을 위해 포맷팅 비활성화
         suppressEmptyNode: true // 빈 태그(self-closing tag)가 <tag></tag>로 확장되지 않고 <tag/>로 유지되도록 설정
       });
@@ -256,6 +256,137 @@ const App: React.FC = () => {
             }
           });
 
+          // 주소 단락 찾아서 이후 모든 단락을 아래로 이동 (겹침 방지)
+          const shiftParagraphsAfterAddress = (obj: any, parentKey: string = ''): void => {
+            if (typeof obj !== 'object' || obj === null) return;
+
+            // hs:sec > hp:p 배열 찾기
+            if (obj["hs:sec"] && obj["hs:sec"]["hp:p"]) {
+              const paragraphs = Array.isArray(obj["hs:sec"]["hp:p"]) ? obj["hs:sec"]["hp:p"] : [obj["hs:sec"]["hp:p"]];
+
+              let addressParagraphIndex = -1;
+              let addressParagraphMaxVertpos = 0;
+
+              // 주소 단락 찾기
+              for (let i = 0; i < paragraphs.length; i++) {
+                const para = paragraphs[i];
+                const runs = para["hp:run"];
+                if (runs) {
+                  const runArray = Array.isArray(runs) ? runs : [runs];
+
+                  for (const run of runArray) {
+                    const text = run["hp:t"];
+                    if (text && typeof text === 'string' && text.includes("주   소   지")) {
+                      addressParagraphIndex = i;
+
+                      // 이 단락의 최대 vertpos 찾기 (여러 줄인 경우)
+                      const linesegs = para["hp:linesegarray"]?.["hp:lineseg"];
+                      if (linesegs) {
+                        let linesegArray = Array.isArray(linesegs) ? linesegs : [linesegs];
+
+                        // 주소 텍스트 길이 확인하여 추가 lineseg 생성 필요 여부 판단
+                        const addressText = run["hp:t"];
+                        const textLength = typeof addressText === 'string' ? addressText.length : 0;
+                        const CHARS_PER_LINE = 43; // 첫 줄 기준
+                        const estimatedLines = Math.ceil(textLength / CHARS_PER_LINE);
+
+                        // 3줄 이상 필요한데 lineseg가 부족하면 추가
+                        if (estimatedLines >= 3 && linesegArray.length < estimatedLines) {
+                          const LINE_HEIGHT = 2240; // HWPUNIT - 기본 줄 간격
+                          const lastLineseg = linesegArray[linesegArray.length - 1];
+                          const lastVertpos = parseInt(lastLineseg["@_vertpos"] || "0");
+                          const lastTextpos = parseInt(lastLineseg["@_textpos"] || "0");
+
+                          // 필요한 만큼 lineseg 추가
+                          const additionalLines = estimatedLines - linesegArray.length;
+
+                          for (let j = 0; j < additionalLines; j++) {
+                            const newLineseg = {
+                              "@_textpos": String(lastTextpos + (j + 1) * CHARS_PER_LINE),
+                              "@_vertpos": String(lastVertpos + (j + 1) * LINE_HEIGHT),
+                              "@_vertsize": lastLineseg["@_vertsize"] || "1400",
+                              "@_textheight": lastLineseg["@_textheight"] || "1400",
+                              "@_baseline": lastLineseg["@_baseline"] || "1190",
+                              "@_spacing": lastLineseg["@_spacing"] || "840",
+                              "@_horzpos": lastLineseg["@_horzpos"] || "750",
+                              "@_horzsize": lastLineseg["@_horzsize"] || "44606",
+                              "@_flags": lastLineseg["@_flags"] || "393216"
+                            };
+                            linesegArray.push(newLineseg);
+                          }
+
+                          // 수정된 linesegarray를 다시 저장
+                          para["hp:linesegarray"]["hp:lineseg"] = linesegArray;
+                        }
+
+                        // 최대 vertpos 계산
+                        for (const seg of linesegArray) {
+                          const vertpos = parseInt(seg["@_vertpos"] || "0");
+                          const vertsize = parseInt(seg["@_vertsize"] || "0");
+                          addressParagraphMaxVertpos = Math.max(addressParagraphMaxVertpos, vertpos + vertsize);
+                        }
+                      }
+
+                      break;
+                    }
+                  }
+                  if (addressParagraphIndex >= 0) break;
+                }
+              }
+
+              // 주소 단락을 찾았으면, 이후 모든 단락을 아래로 이동
+              if (addressParagraphIndex >= 0 && addressParagraphIndex < paragraphs.length - 1) {
+                // 주소 단락의 실제 줄 수 계산
+                const addressPara = paragraphs[addressParagraphIndex];
+                const addressLinesegs = addressPara["hp:linesegarray"]?.["hp:lineseg"];
+                const addressLinesegArray = Array.isArray(addressLinesegs) ? addressLinesegs : [addressLinesegs];
+                const addressLineCount = addressLinesegArray.length;
+
+                // 주소 단락의 마지막 줄 vertpos 찾기
+                let lastAddressVertpos = 0;
+                for (const seg of addressLinesegArray) {
+                  const vertpos = parseInt(seg["@_vertpos"] || "0");
+                  lastAddressVertpos = Math.max(lastAddressVertpos, vertpos);
+                }
+
+                // 다음 단락의 원래 vertpos
+                const nextPara = paragraphs[addressParagraphIndex + 1];
+                const nextLinesegs = nextPara["hp:linesegarray"]?.["hp:lineseg"];
+                const nextLinesegArray = Array.isArray(nextLinesegs) ? nextLinesegs : [nextLinesegs];
+                const nextOriginalVertpos = parseInt(nextLinesegArray[0]?.["@_vertpos"] || "0");
+
+                // 필요한 이동 거리 계산 (최소 5000 HWPUNIT 간격 유지 - 긴 주소 대응)
+                const MIN_GAP = 5000; // 약 17.6mm - 여러 줄 주소를 위한 충분한 간격
+                const currentGap = nextOriginalVertpos - lastAddressVertpos;
+                const SHIFT_AMOUNT = currentGap < MIN_GAP ? MIN_GAP - currentGap : 0;
+
+                if (SHIFT_AMOUNT > 0) {
+
+                  for (let i = addressParagraphIndex + 1; i < paragraphs.length; i++) {
+                    const para = paragraphs[i];
+                    const linesegs = para["hp:linesegarray"]?.["hp:lineseg"];
+
+                    if (linesegs) {
+                      const linesegArray = Array.isArray(linesegs) ? linesegs : [linesegs];
+
+                      for (const seg of linesegArray) {
+                        const currentVertpos = parseInt(seg["@_vertpos"] || "0");
+                        seg["@_vertpos"] = String(currentVertpos + SHIFT_AMOUNT);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            // 재귀적으로 모든 객체 탐색
+            for (const key in obj) {
+              shiftParagraphsAfterAddress(obj[key], key);
+            }
+          };
+
+          shiftParagraphsAfterAddress(jsonObj);
+
           // 다시 XML 문자열로 변환
           const builderOutput = builder.build(jsonObj);
 
@@ -268,50 +399,15 @@ const App: React.FC = () => {
             finalXml = xmlDeclaration + "\r\n" + builderOutput;
           }
 
+
           newZip.file(fileName, finalXml);
 
         } else if (fileName.match(/Contents\/header\.xml/i)) {
-          let xmlContent = await file.async("string");
-          let jsonObj = parser.parse(xmlContent);
-
-          // ID 13: 신청인, 주소지 등 주요 항목 스타일
-          // ID 17: 업체명, 사업자번호 등 하단 항목 스타일
-          // 두 스타일 모두 "라벨 : 값" 형태이므로 50mm(약 14173 HWPUNIT) 내어쓰기 적용
-          const targetStyleIds = ["13", "17"];
-
-          if (jsonObj["hh:head"] && jsonObj["hh:head"]["hh:paraProperties"] && jsonObj["hh:head"]["hh:paraProperties"]["hh:paraPr"]) {
-            const paraPrList = jsonObj["hh:head"]["hh:paraProperties"]["hh:paraPr"];
-
-            // 배열이 아닐 경우(단일 항목) 배열로 처리
-            const paraPrArray = Array.isArray(paraPrList) ? paraPrList : [paraPrList];
-
-            paraPrArray.forEach((paraPr: any) => {
-              if (targetStyleIds.includes(paraPr["@_id"])) {
-                if (paraPr["hh:margin"]) {
-                  // 50mm Hanging Indent (내어쓰기)
-                  // left: 전체 왼쪽 여백 50mm (값의 시작 위치)
-                  // intent: 첫 줄 내어쓰기 -50mm (라벨이 앞으로 튀어나오게)
-                  paraPr["hh:margin"]["@_left"] = "14173";
-                  paraPr["hh:margin"]["@_intent"] = "-14173";
-                }
-              }
-            });
-          }
-
-          const builderOutput = builder.build(jsonObj);
-
-          // XML 선언부 처리
-          const xmlDeclarationMatch = xmlContent.match(/^<\?xml.*?\?>/);
-          const xmlDeclaration = xmlDeclarationMatch ? xmlDeclarationMatch[0] : '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>';
-
-          let finalXml = "";
-          if (builderOutput.trim().startsWith('<?xml')) {
-            finalXml = builderOutput;
-          } else {
-            finalXml = xmlDeclaration + "\r\n" + builderOutput;
-          }
-
-          newZip.file(fileName, finalXml);
+          // header.xml은 원본 그대로 유지 (포맷 보존)
+          const content = await file.async("blob");
+          newZip.file(fileName, content);
+        } else if (fileName.match(/Contents\/section0\.xml/i)) {
+          ;
         } else {
           const content = await file.async("blob");
           newZip.file(fileName, content);
@@ -520,7 +616,7 @@ const App: React.FC = () => {
                         <h1 className="text-[28pt] font-bold inline-block border-b-[1px] border-black pb-2 px-4">해 &nbsp; 촉 &nbsp; 증 &nbsp; 명 &nbsp; 서</h1>
                       </div>
 
-                      <div className="space-y-[12mm] text-[15pt] pl-[15mm] pr-[15mm]">
+                      <div className="space-y-[12mm] text-[15pt] pl-[5mm] pr-[5mm]">
                         <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
                           <div className="whitespace-nowrap flex justify-between h-full"><span>신</span><span>청</span><span>인</span></div>
                           <div className="text-center">:</div>
@@ -534,7 +630,7 @@ const App: React.FC = () => {
                         <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
                           <div className="whitespace-nowrap flex justify-between"><span>주</span><span>소</span><span>지</span></div>
                           <div className="text-center">:</div>
-                          <div className="font-semibold">{extractedData.address}</div>
+                          <div className="font-semibold break-words word-break-keep-all">{extractedData.address}</div>
                         </div>
                         <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
                           <div className="whitespace-nowrap flex justify-between"><span>용</span><span>역</span><span>기</span><span>간</span></div>
@@ -580,7 +676,7 @@ const App: React.FC = () => {
 
       <footer className="w-full mt-12 py-8 text-center text-slate-400 text-xs">
         <p>미리보기에는 업체 정보가 생략되어 있으나, 다운로드 시에는 원본의 모든 정보가 포함됩니다.</p>
-        <p className="mt-1">© 2025 AI HWPX Smart Processor • Powered by Gemini 2.5 Flash (Latency Optimized)</p>
+        <p className="mt-1">© 2025 HWPX Smart Processor • Powered by Regex-based Local Parsing</p>
       </footer>
     </div>
   );
