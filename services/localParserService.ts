@@ -14,7 +14,7 @@ export const parseHWPXContentLocal = async (xmlContent: string): Promise<HWPXDat
         // We can extract all text content first.
 
         // Strategy: Simple Regex matching on the raw XML string might be robust enough given the specific patterns.
-        // Pattern: "신 청 인 : 이한영" -> The spaces might be variable or tabs.
+        // Pattern: "신 청 인 : " -> The spaces might be variable or tabs.
         // We will look for the KEYWORDS and capture everything after the colon until a newline or closing tag.
 
         // remove tabs and huge whitespace to normalize
@@ -24,7 +24,7 @@ export const parseHWPXContentLocal = async (xmlContent: string): Promise<HWPXDat
             .replace(/\s+/g, " "); // collapse multiple spaces to one
 
         // Now cleanText is a long string of text. 
-        // "해 촉 증 명 서 ... 신 청 인 : 이한영 주민등록번호 : ... "
+        // "해 촉 증 명 서 ... 신 청 인 :  주민등록번호 : ... "
 
 
 

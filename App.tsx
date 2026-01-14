@@ -225,20 +225,19 @@ const App: React.FC = () => {
       const files = Object.keys(originalZip.files);
       const editableKeys: (keyof HWPXData)[] = ['applicant', 'ssn', 'address', 'servicePeriod', 'serviceContent', 'purpose', 'issueDate'];
 
-      // XML 파서 및 빌더 초기화
       const parser = new XMLParser({
         ignoreAttributes: false,
         attributeNamePrefix: "@_",
-        preserveOrder: false, // false로 변경하여 간단한 객체 구조 사용
-        trimValues: false, // 텍스트 노드의 앞뒤 공백(들여쓰기 등)을 보존하기 위해 트림 기능 비활성화
-        parseTagValue: false // 숫자 형태의 텍스트를 Number로 자동 변환하지 않도록 설정 (주민등록번호 등 보호)
+        preserveOrder: false,
+        trimValues: false,
+        parseTagValue: false
       });
       const builder = new XMLBuilder({
         ignoreAttributes: false,
         attributeNamePrefix: "@_",
-        preserveOrder: false, // parser와 동일하게 설정
-        format: false, // HWPX 내부의 미세 공백 구조 보존을 위해 포맷팅 비활성화
-        suppressEmptyNode: true // 빈 태그(self-closing tag)가 <tag></tag>로 확장되지 않고 <tag/>로 유지되도록 설정
+        preserveOrder: false,
+        format: false,
+        suppressEmptyNode: true
       });
 
       for (const fileName of files) {
@@ -247,176 +246,144 @@ const App: React.FC = () => {
 
         if (fileName.match(/Contents\/section\d+\.xml/i)) {
           let xmlContent = await file.async("string");
-
-          // 원본 XML 선언부 추출 (<?xml ... ?>)
           const xmlDeclarationMatch = xmlContent.match(/^<\?xml.*?\?>/);
           const xmlDeclaration = xmlDeclarationMatch ? xmlDeclarationMatch[0] : '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>';
 
-          // XML을 객체로 파싱
           let jsonObj = parser.parse(xmlContent);
 
+          // 1. Text Replacement
           editableKeys.forEach((k) => {
             const originalVal = originalExtractedData[k];
             const currentVal = extractedData[k];
-
             if (originalVal && currentVal && originalVal !== currentVal) {
               jsonObj = replaceTextInObject(jsonObj, originalVal, currentVal);
             }
           });
 
-          // 주소 단락 찾아서 이후 모든 단락을 아래로 이동 (겹침 방지)
-          const shiftParagraphsAfterAddress = (obj: any, parentKey: string = ''): void => {
+          // 2. Address Wrapping and Paragraph Shifting (Stable Recursive Logic)
+          const processSections = (obj: any): void => {
             if (typeof obj !== 'object' || obj === null) return;
 
-            // hs:sec > hp:p 배열 찾기
             if (obj["hs:sec"] && obj["hs:sec"]["hp:p"]) {
               const paragraphs = Array.isArray(obj["hs:sec"]["hp:p"]) ? obj["hs:sec"]["hp:p"] : [obj["hs:sec"]["hp:p"]];
-
               let addressParagraphIndex = -1;
               let addressParagraphMaxVertpos = 0;
 
-              // 주소 단락 찾기
               for (let i = 0; i < paragraphs.length; i++) {
                 const para = paragraphs[i];
-                const runs = para["hp:run"];
-                if (runs) {
-                  const runArray = Array.isArray(runs) ? runs : [runs];
+                const runs = para["hp:run"] ? (Array.isArray(para["hp:run"]) ? para["hp:run"] : [para["hp:run"]]) : [];
+                const isAddressPara = runs.some((run: any) =>
+                  run["hp:t"] && typeof run["hp:t"] === 'string' && run["hp:t"].includes("주   소   지")
+                );
 
-                  for (const run of runArray) {
-                    const text = run["hp:t"];
-                    if (text && typeof text === 'string' && text.includes("주   소   지")) {
-                      addressParagraphIndex = i;
+                if (isAddressPara) {
+                  addressParagraphIndex = i;
+                  if (para["hp:linesegarray"] && para["hp:linesegarray"]["hp:lineseg"]) {
+                    let linesegArray = Array.isArray(para["hp:linesegarray"]["hp:lineseg"]) ? para["hp:linesegarray"]["hp:lineseg"] : [para["hp:linesegarray"]["hp:lineseg"]];
+                    const addressRun = runs.find((r: any) => r["hp:t"] && typeof r["hp:t"] === 'string' && r["hp:t"].includes("주   소   지"));
+                    const addressText = addressRun["hp:t"];
+                    const textLength = addressText.length;
 
-                      // 이 단락의 최대 vertpos 찾기 (여러 줄인 경우)
-                      const linesegs = para["hp:linesegarray"]?.["hp:lineseg"];
-                      if (linesegs) {
-                        let linesegArray = Array.isArray(linesegs) ? linesegs : [linesegs];
+                    const getCharWeight = (c: string) => {
+                      const code = c.charCodeAt(0);
+                      return (code >= 0xac00 && code <= 0xd7af) || (code >= 0x1100 && code <= 0x11ff) ? 2 : 1.1;
+                    };
 
-                        // 주소 텍스트 길이 확인하여 추가 lineseg 생성 필요 여부 판단
-                        const addressText = run["hp:t"];
-                        const textLength = typeof addressText === 'string' ? addressText.length : 0;
-                        const CHARS_PER_LINE = 43; // 첫 줄 기준
-                        const estimatedLines = Math.ceil(textLength / CHARS_PER_LINE);
+                    const WEIGHT_PER_LINE = 66;
+                    const baseSeg = { ...linesegArray[0] };
+                    const baseHorzPos = parseInt(baseSeg["@_horzpos"] || "750");
+                    const baseHorzSize = parseInt(baseSeg["@_horzsize"] || "44606");
 
-                        // 3줄 이상 필요한데 lineseg가 부족하면 추가
-                        if (estimatedLines >= 3 && linesegArray.length < estimatedLines) {
-                          const LINE_HEIGHT = 2240; // HWPUNIT - 기본 줄 간격
-                          const lastLineseg = linesegArray[linesegArray.length - 1];
-                          const lastVertpos = parseInt(lastLineseg["@_vertpos"] || "0");
-                          const lastTextpos = parseInt(lastLineseg["@_textpos"] || "0");
+                    // "주   소   지  :  " 라벨의 시각적 너비 (약 20 유닛)
+                    const LABEL_WEIGHT = 20;
+                    const INDENT_HWPUNIT = Math.floor((LABEL_WEIGHT / WEIGHT_PER_LINE) * baseHorzSize);
 
-                          // 필요한 만큼 lineseg 추가
-                          const additionalLines = estimatedLines - linesegArray.length;
+                    linesegArray = [{ ...baseSeg, "@_textpos": "0" }];
+                    let currentTextPos = 0;
+                    const LINE_HEIGHT = 2240;
 
-                          for (let j = 0; j < additionalLines; j++) {
-                            const newLineseg = {
-                              "@_textpos": String(lastTextpos + (j + 1) * CHARS_PER_LINE),
-                              "@_vertpos": String(lastVertpos + (j + 1) * LINE_HEIGHT),
-                              "@_vertsize": lastLineseg["@_vertsize"] || "1400",
-                              "@_textheight": lastLineseg["@_textheight"] || "1400",
-                              "@_baseline": lastLineseg["@_baseline"] || "1190",
-                              "@_spacing": lastLineseg["@_spacing"] || "840",
-                              "@_horzpos": lastLineseg["@_horzpos"] || "750",
-                              "@_horzsize": lastLineseg["@_horzsize"] || "44606",
-                              "@_flags": lastLineseg["@_flags"] || "393216"
-                            };
-                            linesegArray.push(newLineseg);
-                          }
+                    const findNextWrapPos = (t: string, s: number) => {
+                      // 첫 줄은 라벨 무게(20)를 포함해서 계산, 다음 줄부터는 인덴트된 너비에 맞춰 계산
+                      const limit = s === 0 ? WEIGHT_PER_LINE : (WEIGHT_PER_LINE - LABEL_WEIGHT);
+                      let ws = s === 0 ? LABEL_WEIGHT : 0;
+                      let p = s;
+                      while (p < t.length && ws < limit) { ws += getCharWeight(t[p]); p++; }
 
-                          // 수정된 linesegarray를 다시 저장
-                          para["hp:linesegarray"]["hp:lineseg"] = linesegArray;
+                      if (p < t.length) {
+                        let fb = -1;
+                        // 괄호, 쉼표, 공백 등에서 끊기 (너무 멀리(20자 이상) 가기 전까지만 확인)
+                        for (let k = p; k > Math.max(s, p - 20); k--) {
+                          if (t[k] === ' ' || t[k] === '(' || t[k] === ',' || t[k] === '[') { fb = k; break; }
                         }
-
-                        // 최대 vertpos 계산
-                        for (const seg of linesegArray) {
-                          const vertpos = parseInt(seg["@_vertpos"] || "0");
-                          const vertsize = parseInt(seg["@_vertsize"] || "0");
-                          addressParagraphMaxVertpos = Math.max(addressParagraphMaxVertpos, vertpos + vertsize);
-                        }
+                        if (fb !== -1) p = fb + (t[fb] === ' ' ? 1 : 0);
                       }
+                      while (p < t.length && t[p] === ' ') p++;
+                      return p;
+                    };
 
-                      break;
+                    while (currentTextPos < textLength) {
+                      const nextPos = findNextWrapPos(addressText, currentTextPos);
+                      if (nextPos >= textLength || nextPos <= currentTextPos) break;
+                      const prevSeg = linesegArray[linesegArray.length - 1];
+
+                      // 다음 줄부터는 들여쓰기(Hanging Indent) 적용
+                      linesegArray.push({
+                        ...baseSeg,
+                        "@_textpos": String(nextPos),
+                        "@_vertpos": String(parseInt(prevSeg["@_vertpos"] || "0") + LINE_HEIGHT),
+                        "@_horzpos": String(baseHorzPos + INDENT_HWPUNIT),
+                        "@_horzsize": String(baseHorzSize - INDENT_HWPUNIT),
+                        "@_flags": "393216"
+                      });
+                      currentTextPos = nextPos;
+                    }
+
+                    para["hp:linesegarray"]["hp:lineseg"] = linesegArray;
+                    para["hp:linesegarray"]["@_size"] = String(linesegArray.length);
+
+                    addressParagraphMaxVertpos = 0;
+                    for (const seg of linesegArray) {
+                      const v = parseInt(seg["@_vertpos"] || "0");
+                      addressParagraphMaxVertpos = Math.max(addressParagraphMaxVertpos, v + 1400);
                     }
                   }
-                  if (addressParagraphIndex >= 0) break;
+                  break;
                 }
               }
 
-              // 주소 단락을 찾았으면, 이후 모든 단락을 아래로 이동
-              if (addressParagraphIndex >= 0 && addressParagraphIndex < paragraphs.length - 1) {
-                // 주소 단락의 실제 줄 수 계산
-                const addressPara = paragraphs[addressParagraphIndex];
-                const addressLinesegs = addressPara["hp:linesegarray"]?.["hp:lineseg"];
-                const addressLinesegArray = Array.isArray(addressLinesegs) ? addressLinesegs : [addressLinesegs];
-                const addressLineCount = addressLinesegArray.length;
-
-                // 주소 단락의 마지막 줄 vertpos 찾기
-                let lastAddressVertpos = 0;
-                for (const seg of addressLinesegArray) {
-                  const vertpos = parseInt(seg["@_vertpos"] || "0");
-                  lastAddressVertpos = Math.max(lastAddressVertpos, vertpos);
-                }
-
-                // 다음 단락의 원래 vertpos
-                const nextPara = paragraphs[addressParagraphIndex + 1];
-                const nextLinesegs = nextPara["hp:linesegarray"]?.["hp:lineseg"];
-                const nextLinesegArray = Array.isArray(nextLinesegs) ? nextLinesegs : [nextLinesegs];
-                const nextOriginalVertpos = parseInt(nextLinesegArray[0]?.["@_vertpos"] || "0");
-
-                // 필요한 이동 거리 계산 (최소 5000 HWPUNIT 간격 유지 - 긴 주소 대응)
-                const MIN_GAP = 5000; // 약 17.6mm - 여러 줄 주소를 위한 충분한 간격
-                const currentGap = nextOriginalVertpos - lastAddressVertpos;
-                const SHIFT_AMOUNT = currentGap < MIN_GAP ? MIN_GAP - currentGap : 0;
-
-                if (SHIFT_AMOUNT > 0) {
-
-                  for (let i = addressParagraphIndex + 1; i < paragraphs.length; i++) {
-                    const para = paragraphs[i];
-                    const linesegs = para["hp:linesegarray"]?.["hp:lineseg"];
-
-                    if (linesegs) {
-                      const linesegArray = Array.isArray(linesegs) ? linesegs : [linesegs];
-
-                      for (const seg of linesegArray) {
-                        const currentVertpos = parseInt(seg["@_vertpos"] || "0");
-                        seg["@_vertpos"] = String(currentVertpos + SHIFT_AMOUNT);
-                      }
+              if (addressParagraphIndex !== -1) {
+                let nextParaStart = addressParagraphMaxVertpos + 2240;
+                for (let i = addressParagraphIndex + 1; i < paragraphs.length; i++) {
+                  const p = paragraphs[i];
+                  const segs = p["hp:linesegarray"]?.["hp:lineseg"];
+                  if (segs) {
+                    const sArr = Array.isArray(segs) ? segs : [segs];
+                    let minV = Infinity;
+                    for (const s of sArr) minV = Math.min(minV, parseInt(s["@_vertpos"] || "0"));
+                    if (minV < nextParaStart) {
+                      const shift = nextParaStart - minV;
+                      for (const s of sArr) s["@_vertpos"] = String(parseInt(s["@_vertpos"] || "0") + shift);
                     }
+                    let maxV = 0;
+                    for (const s of sArr) maxV = Math.max(maxV, parseInt(s["@_vertpos"] || "0") + 1400);
+                    nextParaStart = maxV + 2240;
                   }
                 }
               }
-            }
-
-            // 재귀적으로 모든 객체 탐색
-            for (const key in obj) {
-              shiftParagraphsAfterAddress(obj[key], key);
+              obj["hs:sec"]["hp:p"] = paragraphs;
+            } else {
+              for (const key in obj) processSections(obj[key]);
             }
           };
 
-          shiftParagraphsAfterAddress(jsonObj);
+          processSections(jsonObj);
 
-          // 다시 XML 문자열로 변환
           const builderOutput = builder.build(jsonObj);
-
-          // 빌더 출력물에 이미 선언부가 있는지 확인 (중복 방지)
-          let finalXml = "";
-          if (builderOutput.trim().startsWith('<?xml')) {
-            finalXml = builderOutput;
-          } else {
-            // 선언부와 본문 사이에 줄바꿈(\r\n)을 추가하여 HWPX 호환성 극대화
-            finalXml = xmlDeclaration + "\r\n" + builderOutput;
-          }
-
-
+          // XML 선언 중복 방지 (가장 중요한 깨짐 원인)
+          const finalXml = builderOutput.trim().startsWith('<?xml') ? builderOutput : xmlDeclaration + "\r\n" + builderOutput;
           newZip.file(fileName, finalXml);
-
-        } else if (fileName.match(/Contents\/header\.xml/i)) {
-          // header.xml은 원본 그대로 유지 (포맷 보존)
-          const content = await file.async("blob");
-          newZip.file(fileName, content);
-        } else if (fileName.match(/Contents\/section0\.xml/i)) {
-          ;
         } else {
+          // 바이너리 파일은 원본 그대로 복사 (안전한 Blob 사용)
           const content = await file.async("blob");
           newZip.file(fileName, content);
         }
