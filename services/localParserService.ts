@@ -26,7 +26,7 @@ export const parseHWPXContentLocal = async (xmlContent: string): Promise<HWPXDat
         // Now cleanText is a long string of text. 
         // "해 촉 증 명 서 ... 신 청 인 : 이한영 주민등록번호 : ... "
 
-        console.log("Local Parser Clean Text Preview:", cleanText.substring(0, 200));
+
 
         // Helper to extract by regex
         const extract = (pattern: RegExp): string => {
