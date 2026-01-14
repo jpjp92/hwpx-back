@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import JSZip from 'jszip';
-import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar, Zap, FileType, BookOpen } from 'lucide-react';
+import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar, Zap, FileType, BookOpen, X } from 'lucide-react';
 import { HWPXData, ProcessingState, FileInfo } from './types';
 import { parseHWPXContentLocal as parseHWPXContent } from './services/localParserService';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
@@ -108,6 +108,14 @@ const App: React.FC = () => {
 
   const [loadingMsg, setLoadingMsg] = useState("문서 구조를 파악하고 있습니다...");
   const [scale, setScale] = useState(1);
+
+  const handleCancelUpload = () => {
+    setFileInfo(null);
+    setExtractedData(null);
+    setOriginalExtractedData(null);
+    setOriginalZip(null);
+    setStatus({ isUnzipping: false, isParsing: false, error: null });
+  };
   const containerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -492,7 +500,16 @@ const App: React.FC = () => {
                   {status.isParsing ? (
                     <Loader2 className="animate-spin text-blue-600" size={18} />
                   ) : (
-                    <CheckCircle2 className="text-emerald-500" size={18} />
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="text-emerald-500" size={18} />
+                      <button
+                        onClick={handleCancelUpload}
+                        className="p-1 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hover:text-slate-600"
+                        title="파일 취소"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
