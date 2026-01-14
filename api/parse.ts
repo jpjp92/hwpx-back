@@ -106,7 +106,7 @@ export default async function handler(req: any, res: any) {
         } catch (parseErr: any) {
             console.error("Failed to JSON.parse model response:", parseErr);
             // Return raw text for debugging (not ideal for production)
-            return res.status(500).json({ error: 'Invalid JSON from model', raw: text, details: parseErr?.message });
+            return res.status(500).json({ error: 'Invalid JSON from model', details: parseErr?.message });
         }
     } catch (error: any) {
         console.error("Gemini API Error:", error);
