@@ -8,9 +8,11 @@ Regex 기반 로컬 파싱을 통해 HWPX 문서를 분석하고, PostgreSQL 데
 
 - **⚡ 고속 로컬 파싱**: Regex 기반 XML 파싱으로 외부 API 호출 없이 브라우저에서 즉시 데이터를 추출합니다.
 - **🏗️ Advanced 레이아웃 엔진**:
-  - **Hanging Indent**: 긴 주소 텍스트에 대해 자동으로 들여쓰기 좌표를 계산하여 가독성을 높입니다.
+  - **Hanging Indent**: 긴 주소 텍스트에 대해 자동으로 들여쓰기 좌표를 계산하여 가독성을 높입니다. (최대 너비 최적화 완료)
   - **Dynamic Shifting**: 내용이 길어질 경우 하단 단락들을 자동으로 밀어내어 겹침을 방지합니다.
 - **🛡️ 원본 무결성**: OCF 표준 준수 및 속성 보호를 통해 '파일 손상' 없이 원본 서식을 완벽하게 유지합니다.
+- **🎨 UI/UX Refinement**: Browser Native alert 대신 전용 커스텀 모달(Lucide 아이콘 기반)을 사용하여 사용자 경험을 고도화했습니다.
+- **📂 직관적인 파일명**: 다운로드 시 `신청인성함_건강보험공단제출용해촉증명서.hwpx` 형식으로 자동 생성됩니다.
 
 ### 2. 백엔드 및 보안 (New)
 
@@ -40,7 +42,7 @@ flowchart TD
         HASH --> QUERY["DB 조회 (Blind Index)"]
     end
 
-    subgraph Database ["DB (AWS RDS)"]
+    subgraph Database ["DB (AWS EC2 / PostgreSQL)"]
         QUERY -- "SSN Hash 매칭" --> DB[("User Registry")]
         DB -- "검증 결과" --> API
     end
@@ -48,7 +50,7 @@ flowchart TD
     API -- "Address Match 여부" --> VERIFY_RES
 ```
 
-## �️ 데이터베이스 구조
+## 🗄️ 데이터베이스 구조
 
 ### `hwpx_01.user_registry` (메인 테이블)
 
@@ -73,7 +75,7 @@ flowchart TD
 > [!NOTE]
 > 주민등록번호 원본(`ssn`)은 직접 조회하지 않으며, 검증 시에는 검색 인덱싱된 `ssn_hash`값과 사용자 이름(`registrant_name`)을 결합하여 매칭합니다.
 
-## �📂 프로젝트 구조
+## 📂 프로젝트 구조
 
 ```text
 hwpx-back/
@@ -90,30 +92,55 @@ hwpx-back/
 
 ### 1. 요구 사항
 
-- Node.js (v18+)
-- Vercel CLI (`npm i -g vercel`)
-- PostgreSQL 데이터베이스 (설정 완료됨)
+- **Node.js**: v18 이상 권장
+- **Vercel CLI**: 서버리스 함수 및 로컬 환경 구동을 위해 필수
+- **PostgreSQL**: 데이터 저장을 위한 DB 환경 (현재 AWS EC2에 구성됨)
 
-### 2. 환경 변수 설정
+### 2. 환경 및 의존성 설정
 
-Vercel 대시보드에 설정된 다음 변수들이 필요합니다:
-
-- `DATABASE_URL`: PostgreSQL 연결 문자열
-- `DB_ENCRYPTION_KEY`: 암호화 및 해싱에 사용되는 32byte 키
-
-### 3. 설치 및 실행
-
-**로컬 개발 시 반드시 Vercel CLI를 사용해야 API가 동작합니다.**
+먼저 프로젝트를 로컬로 가져온 후 필요한 패키지를 설치하고, Vercel 계정 인증을 진행합니다.
 
 ```bash
-# 의존성 설치
+# 1. 의존성 설치 (프로젝트 루트에서 실행)
 npm install
 
-# 로컬 개발 서버 실행 (API + Frontend)
+# 2. Vercel CLI 전역 설치 (미설치 시)
+npm install -g vercel
+
+# 3. Vercel 계정 로그인 (로그인이 안 되어 있는 경우)
+vercel login
+```
+
+### 3. 프로젝트 연결 및 환경 변수 동기화
+
+로컬 환경에서 DB API를 호출하기 위해 Vercel 프로젝트와 연동하고 저장된 환경 변수를 가져옵니다.
+
+```bash
+# 4. Vercel 프로젝트 연결
+# (최초 실행 시 'Set up and deploy?' 질문에 'Y' 후 기존 프로젝트 이름 선택)
+vercel link
+
+# 5. 환경 변수 동기화 (.env.local 생성)
+vercel env pull .env.local
+```
+
+### 4. 로컬 실행
+
+**API와 프론트엔드를 동시에 구동하려면 반드시 `vercel dev`를 사용해야 합니다.**
+
+```bash
+# 로컬 개발 서버 실행 (localhost:3000)
 vercel dev
 ```
 
-> **Note**: `npm run dev`는 프론트엔드만 실행되므로 API 호출 시 에러가 발생합니다.
+> **Note**: `npm run dev`는 프론트엔드 전용 서버이므로 `/api/verify` 호출 시 에러가 발생합니다. 반드시 Vercel CLI가 로컬 런타임을 에뮬레이션하는 `vercel dev`를 사용해 주세요.
+
+## 🔑 환경 변수 목록
+
+Vercel 대시보드(Environment Variables) 혹은 `.env` 파일에 기록되어야 하는 핵심 변수입니다:
+
+- `DATABASE_URL`: PostgreSQL 인스턴스 접속 주소
+- `DB_ENCRYPTION_KEY`: DB 데이터 암호화 및 해싱용 32자 비밀키
 
 ## ⚠️ 참고 사항
 
