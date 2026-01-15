@@ -394,8 +394,8 @@ const App: React.FC = () => {
       if (result.addressMatch) {
         showModal({
           type: 'success',
-          title: '안전하게 확인되었습니다',
-          message: '데이터베이스와 일치함이 확인되었습니다.\n이제 증명서를 다운로드하실 수 있습니다.'
+          title: '정상적으로 확인되었습니다',
+          message: '입력하신 정보가 데이터와 일치합니다.\n이제 증명서를 다운로드하실 수 있습니다.'
         });
         setIsVerified(true);
       } else {
