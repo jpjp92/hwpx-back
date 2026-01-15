@@ -134,6 +134,15 @@ const Modal: React.FC<{ config: ModalConfig; onClose: () => void }> = ({ config,
 
 // ============================================================================
 
+// 주민번호 1차 암호화 (SHA-256)
+const hashSSN = async (ssn: string): Promise<string> => {
+  if (!ssn) return "";
+  const msgUint8 = new TextEncoder().encode(ssn);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
 
 // XML 객체를 재귀적으로 탐색하여 텍스트 값을 정밀하게 치환하는 함수
 const replaceTextInObject = (obj: any, originalVal: string, currentVal: string): any => {
@@ -192,7 +201,17 @@ const App: React.FC = () => {
   });
 
   const showModal = (config: Partial<ModalConfig>) => {
-    setModalConfig({ ...modalConfig, ...config, isOpen: true });
+    // 이전 모달의 설정(버튼 라벨, 콜백 등)이 남지 않도록 초기화 후 적용
+    setModalConfig({
+      isOpen: true,
+      type: config.type || 'info',
+      title: config.title || '',
+      message: config.message || '',
+      onConfirm: config.onConfirm,
+      onCancel: config.onCancel,
+      confirmLabel: config.confirmLabel || '확인',
+      cancelLabel: config.cancelLabel,
+    });
   };
 
   const closeModal = () => {
@@ -340,12 +359,15 @@ const App: React.FC = () => {
     setIsVerifying(true);
 
     try {
+      // 1차 암호화 (SHA-256) 수행 - 네트워크 전송 시 원본 노출 차단
+      const hashedSsn = await hashSSN(extractedData.ssn);
+
       const response = await fetch('/api/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           registrant_name: extractedData.applicant,
-          ssn: extractedData.ssn,
+          ssn: hashedSsn, // <-- 원본 대신 해시값 전송
           address: extractedData.address
         })
       });
@@ -360,7 +382,10 @@ const App: React.FC = () => {
         showModal({
           type: 'error',
           title: '등록된 정보를 찾을 수 없습니다',
-          message: '입력하신 성함과 주민등록번호가 정확한지\n다시 한번 확인해 주세요.'
+          message: '입력하신 성함과 주민등록번호가 정확한지\n다시 한번 확인해 주세요.',
+          confirmLabel: '확인',
+          onCancel: undefined,
+          cancelLabel: undefined
         });
         setIsVerifying(false);
         return;

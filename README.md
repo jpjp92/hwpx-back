@@ -19,7 +19,7 @@ Regex 기반 로컬 파싱을 통해 HWPX 문서를 분석하고, PostgreSQL 데
 - **🛡️ 강력한 데이터 보안**:
   - **SSN 암호화**: 주민등록번호 원본은 `pgcrypto` AES-256 방식으로 암호화되어 DB(AWS EC2)에 안전하게 저장됩니다.
   - **Blind Index Searching**: 검색 시에는 복호화 없이 `HMAC-SHA256` 해시값만을 사용하여 매칭하므로, 보안성과 성능을 동시에 확보합니다.
-  - **이중 해싱 (Upcoming)**: 클라이언트 SHA-256 + 서버 HMAC-SHA256 구조로 네트워크 구간 보안을 원천 강화합니다.
+  - **이중 해싱 (Double Hashing)**: 클라이언트 SHA-256 + 서버 HMAC-SHA256 구조로 네트워크 구간에서 원본 주민번호가 노출되지 않도록 보안을 강화했습니다.
 - **🔒 원본 무결성**: OCF 표준 준수 및 XML 속성 보호를 통해 파일 손상 없이 원본 서식을 완벽하게 유지합니다.
 
 ## 📋 시스템 아키텍처
@@ -29,7 +29,8 @@ flowchart TD
     subgraph Frontend ["Frontend (Browser)"]
         U[HWPX 업로드] --> PARSE[로컬 파싱]
         PARSE --> EDIT[데이터 편집]
-        EDIT --> VERIFY_REQ["검증 요청 (/api/verify)"]
+        EDIT --> HASH_CLIENT["1차 해싱 (SHA-256)"]
+        HASH_CLIENT --> VERIFY_REQ["검증 요청 (/api/verify)"]
         VERIFY_RES --> REPLACE[XML 텍스트 치환]
         REPLACE --> LAYOUT[좌표/들여쓰기 재계산]
         LAYOUT --> REPACK[HWPX 리패키징]
@@ -37,9 +38,9 @@ flowchart TD
     end
 
     subgraph Backend ["Backend (Serverless API)"]
-        VERIFY_REQ -- "HTTPS" --> API[Verify Function]
-        API --> HASH[HMAC-SHA256 해싱]
-        HASH --> QUERY["DB 조회 (Blind Index)"]
+        VERIFY_REQ -- "HTTPS (해시값 전송)" --> API[Verify Function]
+        API --> HASH_SERVER["2차 해싱 (HMAC-SHA256)"]
+        HASH_SERVER --> QUERY["DB 조회 (Blind Index)"]
     end
 
     subgraph Database ["DB (AWS EC2 / PostgreSQL)"]
@@ -49,6 +50,24 @@ flowchart TD
 
     API -- "Address Match 여부" --> VERIFY_RES
 ```
+
+## 🔐 보안 아키텍처 (Security Architecture)
+
+본 시스템은 다층 보안 구조를 통해 민감한 개인정보(주민등록번호)를 보호합니다.
+
+### 이중 해싱 (Double Hashing)
+
+1. **클라이언트 (1차)**: 브라우저에서 SHA-256 해싱 → 네트워크 전송 시 원본 노출 차단
+2. **서버 (2차)**: HMAC-SHA256 + 비밀키 → DB 검색용 Blind Index 생성
+3. **효과**: 네트워크 패킷 캡처, DB 유출 시에도 원본 복원 불가능
+
+### 데이터 암호화
+
+- **저장**: 주민번호 원본은 AES-256 (`pgcrypto`)으로 암호화되어 DB에 저장
+- **검색**: 복호화 없이 해시 인덱스만으로 매칭 수행 (성능 + 보안)
+
+> [!TIP]
+> 이중 해싱의 상세 원리와 데이터 흐름도는 [보안 기술 명세서](./README(security).md)를 참고하세요.
 
 ## 🗄️ 데이터베이스 구조
 
@@ -63,7 +82,7 @@ flowchart TD
 | `payment_date` | DATE | 지급년월일 | |
 | `registrant_name` | TEXT | 신고소득자명 | **Index** (조회용) |
 | **`ssn`** | **BYTEA** | 주민등록번호 | **AES-256 암호화** 저장 (`pgcrypto`) |
-| **`ssn_hash`** | **TEXT** | 주민번호 해시 | **Blind Index** (HMAC-SHA256), **Index** |
+| **`ssn_hash`** | **TEXT** | 주민번호 해시 | **Blind Index** (이중 해싱: SHA-256 → HMAC-SHA256), **Index** |
 | `contact` | TEXT | 연락처 | |
 | `address` | TEXT | 거주주소 | |
 | `promotion_name` | TEXT | 프로모션명 | |
