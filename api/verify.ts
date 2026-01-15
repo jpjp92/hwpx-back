@@ -5,8 +5,34 @@ import crypto from 'crypto';
 // Global connection pool for re-use across invocations
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
+    connectionTimeoutMillis: 10000, // 10초 타임아웃 (5초는 너무 짧음)
+    idleTimeoutMillis: 30000,       // 30초 유휴 타임아웃
+    max: 5,                         // 최대 5개 연결
     // ssl: { rejectUnauthorized: false } // Server does not support SSL on port 5999
 });
+
+// DNS 실패 및 연결 타임아웃 시 자동 재시도 함수
+async function queryWithRetry(query: string, params: any[], maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await pool.query(query, params);
+        } catch (error: any) {
+            // DNS 조회 실패 또는 연결 타임아웃인 경우에만 재시도
+            const shouldRetry = (
+                error.code === 'EAI_AGAIN' ||
+                error.message?.includes('connection timeout') ||
+                error.message?.includes('Connection terminated')
+            ) && attempt < maxRetries;
+
+            if (shouldRetry) {
+                console.log(`[Retry ${attempt}/${maxRetries}] Connection error: ${error.message}, retrying...`);
+                await new Promise(resolve => setTimeout(resolve, 1500)); // 1.5초 대기
+                continue;
+            }
+            throw error; // 다른 에러는 즉시 throw
+        }
+    }
+}
 
 function getSsnHash(ssn: string): string {
     if (!process.env.DB_ENCRYPTION_KEY) {
@@ -47,9 +73,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
         const ssn_hash = getSsnHash(ssn);
 
-        // Blind Index Search
+        // Blind Index Search (재시도 로직 적용)
         // Matches against hash only, never decrypts the SSN
-        const result = await pool.query(
+        const result = await queryWithRetry(
             `SELECT registrant_name, address 
        FROM hwpx_01.user_registry 
        WHERE registrant_name = $1 AND ssn_hash = $2`,

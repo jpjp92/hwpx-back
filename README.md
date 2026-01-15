@@ -98,14 +98,44 @@ flowchart TD
 
 ```text
 hwpx-back/
+├── src/                       # 프론트엔드 소스 코드 (모듈화된 구조)
+│   ├── components/
+│   │   └── ui/                # 재사용 가능한 UI 컴포넌트
+│   │       ├── Card.tsx       # 카드 레이아웃
+│   │       ├── SectionHeader.tsx  # 섹션 헤더
+│   │       ├── Button.tsx     # 커스텀 버튼
+│   │       └── Modal.tsx      # 커스텀 모달 (성공/에러/경고)
+│   ├── hooks/                 # 커스텀 React 훅
+│   │   ├── useModal.ts        # 모달 상태 관리
+│   │   └── useFileUpload.ts   # 파일 업로드 로직
+│   └── utils/                 # 유틸리티 함수
+│       ├── crypto.ts          # SHA-256 해싱
+│       ├── xml.ts             # XML 텍스트 치환
+│       └── hwpx/
+│           └── layout.ts      # 레이아웃 계산 (문자 가중치, 상수)
 ├── api/
 │   └── verify.ts              # Vercel Serverless Function (DB 검증 로직)
 ├── services/
-│   └── localParserService.ts  # HWPX 파싱 엔진
+│   └── localParserService.ts  # HWPX 파싱 엔진 (Regex 기반)
 ├── db_data/                   # DB 마이그레이션 스크립트 및 문서
-├── App.tsx                    # 메인 UI 및 프론트엔드 로직
+├── App.tsx                    # 메인 애플리케이션 (660줄, 27% 감소)
+├── types.ts                   # TypeScript 타입 정의
 └── README.md                  # 프로젝트 문서
 ```
+
+### 🏗️ 아키텍처 개선 (2026-01-15 리팩토링)
+
+**모듈화 원칙:**
+
+- **관심사 분리 (SoC)**: UI, 비즈니스 로직, 유틸리티를 독립된 모듈로 분리
+- **재사용성**: 컴포넌트와 훅을 다른 프로젝트에서도 활용 가능
+- **유지보수성**: 각 모듈이 단일 책임을 가지도록 설계
+
+**코드 최적화:**
+
+- 원본: 901줄 (단일 파일)
+- 리팩토링 후: 660줄 (9개 모듈로 분산)
+- 감소율: 약 27%
 
 ## ⚙️ 시작하기
 

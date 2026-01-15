@@ -1,198 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 import JSZip from 'jszip';
-import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar, Zap, FileType, BookOpen, X, Search, Check, AlertTriangle } from 'lucide-react';
-import { HWPXData, ProcessingState, FileInfo } from './types';
-import { parseHWPXContentLocal as parseHWPXContent } from './services/localParserService';
+import { Upload, FileText, Edit3, Loader2, Save, RotateCcw, Calendar, Zap, FileType, BookOpen, Search, Check, Info, CheckCircle2, X, AlertCircle } from 'lucide-react';
+import { HWPXData } from './types';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
-
-interface ModalConfig {
-  isOpen: boolean;
-  type: 'success' | 'error' | 'warning' | 'info';
-  title: string;
-  message: React.ReactNode;
-  onConfirm?: () => void;
-  onCancel?: () => void;
-  confirmLabel?: string;
-  cancelLabel?: string;
-}
+import Card from './src/components/ui/Card';
+import SectionHeader from './src/components/ui/SectionHeader';
+import Button from './src/components/ui/Button';
+import Modal, { ModalConfig } from './src/components/ui/Modal';
+import { hashSSN } from './src/utils/crypto';
+import { replaceTextInObject } from './src/utils/xml';
+import { getCharWeight, LAYOUT_CONSTANTS } from './src/utils/hwpx/layout';
+import { useFileUpload } from './src/hooks/useFileUpload';
 
 // ============================================================================
-// 공통 UI 컴포넌트 (일관성 있는 디자인 시스템)
+// UI 컴포넌트는 components/ui/ 폴더로 분리되었습니다
 // ============================================================================
 
-const Card: React.FC<React.PropsWithChildren<{ className?: string }>> = ({ className = "", children }) => (
-  <section className={`bg-white rounded-2xl border border-slate-200 shadow-sm ${className}`}>
-    {children}
-  </section>
-);
-
-const SectionHeader: React.FC<{
-  title: string;
-  subtitle?: string;
-  right?: React.ReactNode
-}> = ({ title, subtitle, right }) => (
-  <div className="flex items-start justify-between gap-3">
-    <div>
-      <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-      {subtitle && <p className="mt-1 text-sm text-slate-500 leading-relaxed">{subtitle}</p>}
-    </div>
-    {right}
-  </div>
-);
-
-const Button: React.FC<
-  React.PropsWithChildren<{
-    variant?: "primary" | "secondary";
-    onClick?: () => void;
-    disabled?: boolean;
-    className?: string;
-  }>
-> = ({ variant = "secondary", disabled, className = "", children, ...props }) => {
-  const base =
-    "inline-flex items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 h-11";
-  const styles =
-    variant === "primary"
-      ? "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400 disabled:bg-blue-300 border border-transparent"
-      : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 focus:ring-slate-300 disabled:text-slate-300";
-  return (
-    <button
-      {...props}
-      disabled={disabled}
-      className={`${base} ${styles} ${disabled ? "cursor-not-allowed" : ""} ${className}`}
-    >
-      {children}
-    </button>
-  );
-};
-
-const Modal: React.FC<{ config: ModalConfig; onClose: () => void }> = ({ config, onClose }) => {
-  if (!config.isOpen) return null;
-
-  const icons = {
-    success: <CheckCircle2 className="w-12 h-12 text-emerald-500" />,
-    error: <AlertCircle className="w-12 h-12 text-rose-500" />,
-    warning: <AlertTriangle className="w-12 h-12 text-amber-500" />,
-    info: <Info className="w-12 h-12 text-blue-500" />,
-  };
-
-  const colors = {
-    success: "bg-emerald-50",
-    error: "bg-rose-50",
-    warning: "bg-amber-50",
-    info: "bg-blue-50",
-  };
-
-  return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"
-        onClick={() => !config.onConfirm && onClose()}
-      />
-
-      {/* Modal Content */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all animate-in fade-in zoom-in slide-in-from-bottom-4 duration-300">
-        <div className="p-6">
-          <div className="flex flex-col items-center text-center">
-            <div className={`mb-4 p-3 rounded-full ${colors[config.type]}`}>
-              {icons[config.type]}
-            </div>
-            <h3 className="text-xl font-bold text-slate-900 mb-2">{config.title}</h3>
-            <div className="text-slate-600 leading-relaxed whitespace-pre-wrap">
-              {config.message}
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-50 p-4 flex gap-3">
-          {(config.onCancel || config.cancelLabel) && (
-            <Button
-              className="flex-1 !h-12"
-              onClick={() => {
-                config.onCancel?.();
-                onClose();
-              }}
-            >
-              {config.cancelLabel || "취소"}
-            </Button>
-          )}
-          <Button
-            variant="primary"
-            className="flex-1 !h-12"
-            onClick={() => {
-              config.onConfirm?.();
-              onClose();
-            }}
-          >
-            {config.confirmLabel || "확인"}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // ============================================================================
-
-// 주민번호 1차 암호화 (SHA-256)
-const hashSSN = async (ssn: string): Promise<string> => {
-  if (!ssn) return "";
-  const msgUint8 = new TextEncoder().encode(ssn);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-};
-
-
-// XML 객체를 재귀적으로 탐색하여 텍스트 값을 정밀하게 치환하는 함수
-const replaceTextInObject = (obj: any, originalVal: string, currentVal: string): any => {
-  // null 또는 undefined는 그대로 반환하여 구조를 유지함
-  if (obj === null || obj === undefined) return obj;
-
-  const objType = typeof obj;
-
-  if (objType === 'string') {
-    // 문자열인 경우에만 치환 수행
-    return obj.split(originalVal).join(currentVal);
-  }
-
-  if (Array.isArray(obj)) {
-    // 배열인 경우 모든 요소를 순회하며 치환
-    for (let i = 0; i < obj.length; i++) {
-      const result = replaceTextInObject(obj[i], originalVal, currentVal);
-      // 결과가 undefined가 아닌 경우에만 할당 (방어적 처리)
-      if (result !== undefined) {
-        obj[i] = result;
-      }
-    }
-  } else if (objType === 'object') {
-    // 객체인 경우 모든 속성을 순회하며 치환
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        // HWPX의 구조를 결정하는 속성(Attribute, @_로 시작)은 치환에서 제외하여 서식 깨짐 방지
-        if (key.startsWith('@_')) continue;
-
-        const result = replaceTextInObject(obj[key], originalVal, currentVal);
-        if (result !== undefined) {
-          obj[key] = result;
-        }
-      }
-    }
-  }
-  return obj;
-};
+// 유틸리티 함수는 src/utils/ 폴더로 분리되었습니다
+// ============================================================================
 
 const App: React.FC = () => {
-  const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
-  const [extractedData, setExtractedData] = useState<HWPXData | null>(null);
-  const [originalExtractedData, setOriginalExtractedData] = useState<HWPXData | null>(null);
-  const [originalZip, setOriginalZip] = useState<JSZip | null>(null);
-  const [status, setStatus] = useState<ProcessingState>({
-    isUnzipping: false,
-    isParsing: false,
-    error: null,
-  });
-
+  // 모달 상태 관리
   const [modalConfig, setModalConfig] = useState<ModalConfig>({
     isOpen: false,
     type: 'info',
@@ -201,7 +30,6 @@ const App: React.FC = () => {
   });
 
   const showModal = (config: Partial<ModalConfig>) => {
-    // 이전 모달의 설정(버튼 라벨, 콜백 등)이 남지 않도록 초기화 후 적용
     setModalConfig({
       isOpen: true,
       type: config.type || 'info',
@@ -218,19 +46,22 @@ const App: React.FC = () => {
     setModalConfig(prev => ({ ...prev, isOpen: false }));
   };
 
+  // 파일 업로드 훅 사용
+  const {
+    fileInfo,
+    extractedData,
+    originalExtractedData,
+    originalZip,
+    status,
+    handleFileUpload,
+    handleCancelUpload,
+    setExtractedData,
+    setOriginalExtractedData,
+  } = useFileUpload(showModal);
+
   const [isVerified, setIsVerified] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
-
-  const [loadingMsg, setLoadingMsg] = useState("문서 구조를 파악하고 있습니다...");
   const [scale, setScale] = useState(1);
-
-  const handleCancelUpload = () => {
-    setFileInfo(null);
-    setExtractedData(null);
-    setOriginalExtractedData(null);
-    setOriginalZip(null);
-    setStatus({ isUnzipping: false, isParsing: false, error: null });
-  };
   const containerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -257,75 +88,9 @@ const App: React.FC = () => {
     };
   }, [extractedData]);
 
-  useEffect(() => {
-    let interval: any;
-    if (status.isParsing) {
-      const messages = [
-        "XML 데이터를 분석하고 있습니다...",
-        "텍스트 영역에서 핵심 정보를 추출 중입니다...",
-        "신청인 및 업체 정보를 매핑하고 있습니다...",
-        "거의 다 되었습니다. 결과를 정리 중입니다..."
-      ];
-      let i = 0;
-      interval = setInterval(() => {
-        setLoadingMsg(messages[i % messages.length]);
-        i++;
-      }, 2500);
-    }
-    return () => clearInterval(interval);
-  }, [status.isParsing]);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const uploadedFile = event.target.files?.[0];
-    if (!uploadedFile) return;
 
-    if (uploadedFile.name.endsWith('.hwp')) {
-      showModal({
-        type: 'error',
-        title: '형식 미지원',
-        message: "이 프로그램은 .hwpx 형식만 지원합니다.\n.hwp 파일을 한글 프로그램에서 '다른 이름으로 저장'을 통해\n'.hwpx'로 변환 후 업로드해주세요."
-      });
-      setFileInfo(null);
-      setExtractedData(null);
-      return;
-    }
-
-    if (!uploadedFile.name.endsWith('.hwpx')) {
-      showModal({
-        type: 'error',
-        title: '형식 미지원',
-        message: "지원하지 않는 파일 형식입니다. .hwpx 파일을 업로드해주세요."
-      });
-      return;
-    }
-
-    setFileInfo({
-      name: uploadedFile.name,
-      size: uploadedFile.size,
-      lastModified: uploadedFile.lastModified,
-    });
-    setStatus({ isUnzipping: true, isParsing: false, error: null });
-
-    try {
-      const zip = await JSZip.loadAsync(uploadedFile);
-      setOriginalZip(zip);
-
-      const sectionFiles = Object.keys(zip.files).filter(name => name.match(/Contents\/section\d+\.xml/i));
-      if (sectionFiles.length === 0) throw new Error("문서 내용을 찾을 수 없습니다. 표준 HWPX 형식이 아닐 수 있습니다.");
-
-      const xmlText = await zip.file(sectionFiles[0])!.async("string");
-
-      setStatus(prev => ({ ...prev, isUnzipping: false, isParsing: true }));
-
-      const data = await parseHWPXContent(xmlText);
-      setExtractedData(data);
-      setOriginalExtractedData(data);
-      setStatus(prev => ({ ...prev, isParsing: false }));
-    } catch (err: any) {
-      console.error(err);
-      setStatus({ isUnzipping: false, isParsing: false, error: err.message || "파일 처리 중 오류가 발생했습니다." });
-    }
-  };
+  // handleFileUpload는 useFileUpload 훅에서 제공됨
 
   const handleDataChange = (field: keyof HWPXData, value: string) => {
     if (!extractedData) return;
@@ -502,18 +267,12 @@ const App: React.FC = () => {
                     const addressText = addressRun["hp:t"];
                     const textLength = addressText.length;
 
-                    const getCharWeight = (c: string) => {
-                      const code = c.charCodeAt(0);
-                      return (code >= 0xac00 && code <= 0xd7af) || (code >= 0x1100 && code <= 0x11ff) ? 2 : 1.1;
-                    };
-
-                    const WEIGHT_PER_LINE = 100;
+                    const { WEIGHT_PER_LINE, LABEL_WEIGHT } = LAYOUT_CONSTANTS;
                     const baseSeg = { ...linesegArray[0] };
                     const baseHorzPos = parseInt(baseSeg["@_horzpos"] || "750");
                     const baseHorzSize = parseInt(baseSeg["@_horzsize"] || "44606");
 
-                    // "주   소   지  :  " 라벨의 시각적 너비 (약 20 유닛)
-                    const LABEL_WEIGHT = 20;
+                    // "주   소   지  :  " 라벨의 시각적 너비를 고려한 들여쓰기 계산
                     const INDENT_HWPUNIT = Math.floor((LABEL_WEIGHT / WEIGHT_PER_LINE) * baseHorzSize);
 
                     linesegArray = [{ ...baseSeg, "@_textpos": "0" }];
