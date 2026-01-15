@@ -5,7 +5,7 @@ import crypto from 'crypto';
 // Global connection pool for re-use across invocations
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    connectionTimeoutMillis: 10000, // 10초 타임아웃
+    connectionTimeoutMillis: 10000, // 10초 타임아웃 (로컬 환경 안정성을 위해 다시 증설)
     max: 5,                         // 최대 5개 연결
     // ssl: { rejectUnauthorized: false } // Server does not support SSL on port 5999
 });
@@ -25,15 +25,19 @@ async function queryWithRetry(query: string, params: any[], maxRetries = 3) {
             return await pool.query(query, params);
         } catch (error: any) {
             // DNS 조회 실패 또는 연결 타임아웃인 경우에만 재시도
-            const shouldRetry = (
-                error.code === 'EAI_AGAIN' ||
+            const isDnsError = error.code === 'EAI_AGAIN';
+            const isTimeoutError =
                 error.message?.includes('connection timeout') ||
-                error.message?.includes('Connection terminated')
-            ) && attempt < maxRetries;
+                error.message?.includes('Connection terminated') ||
+                error.message?.includes('timeout expired');
+
+            const shouldRetry = (isDnsError || isTimeoutError) && attempt < maxRetries;
 
             if (shouldRetry) {
-                console.log(`[Retry ${attempt}/${maxRetries}] Connection error: ${error.message}, retrying...`);
-                await new Promise(resolve => setTimeout(resolve, 1500)); // 1.5초 대기
+                // DNS 에러는 빠르게 재시도(500ms), 일반 타임아웃은 더 긴 간격(2000ms)을 두어 안정화 도모
+                const delay = isDnsError ? 500 : 2000;
+                console.log(`[Retry ${attempt}/${maxRetries}] ${isDnsError ? 'DNS' : 'Connection'} error, retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
                 continue;
             }
             throw error; // 다른 에러는 즉시 throw
