@@ -5,11 +5,18 @@ import crypto from 'crypto';
 // Global connection pool for re-use across invocations
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    connectionTimeoutMillis: 10000, // 10초 타임아웃 (5초는 너무 짧음)
-    idleTimeoutMillis: 30000,       // 30초 유휴 타임아웃
+    connectionTimeoutMillis: 10000, // 10초 타임아웃
     max: 5,                         // 최대 5개 연결
     // ssl: { rejectUnauthorized: false } // Server does not support SSL on port 5999
 });
+
+// Pool Warming: Cold Start 시 연결 미리 생성하여 첫 요청 속도 개선
+pool.connect()
+    .then(client => {
+        console.log('✅ Database connection pool warmed up');
+        client.release();
+    })
+    .catch(err => console.error('⚠️ Pool warming failed (non-critical):', err));
 
 // DNS 실패 및 연결 타임아웃 시 자동 재시도 함수
 async function queryWithRetry(query: string, params: any[], maxRetries = 3) {
