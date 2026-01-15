@@ -482,7 +482,7 @@ const App: React.FC = () => {
                       return (code >= 0xac00 && code <= 0xd7af) || (code >= 0x1100 && code <= 0x11ff) ? 2 : 1.1;
                     };
 
-                    const WEIGHT_PER_LINE = 66;
+                    const WEIGHT_PER_LINE = 100;
                     const baseSeg = { ...linesegArray[0] };
                     const baseHorzPos = parseInt(baseSeg["@_horzpos"] || "750");
                     const baseHorzSize = parseInt(baseSeg["@_horzsize"] || "44606");
