@@ -4,23 +4,23 @@ Regex 기반 로컬 파싱을 통해 HWPX 문서를 분석하고, PostgreSQL 데
 
 ## 🚀 주요 기능
 
-### 1. HWPX 처리 엔진
+### 1. Frontend (Client-side)
 
-- **⚡ 고속 로컬 파싱**: Regex 기반 XML 파싱으로 외부 API 호출 없이 브라우저에서 즉시 데이터를 추출합니다.
+- **⚡ HWPX 고속 로컬 파싱**: Regex 기반 XML 파싱으로 외부 API 호출 없이 브라우저에서 즉시 데이터를 추출합니다.
 - **🏗️ Advanced 레이아웃 엔진**:
-  - **Hanging Indent**: 긴 주소 텍스트에 대해 자동으로 들여쓰기 좌표를 계산하여 가독성을 높입니다. (최대 너비 최적화 완료)
+  - **Hanging Indent**: 긴 주소 텍스트에 대해 자동으로 들여쓰기 좌표를 계산하여 가독성을 높입니다.
   - **Dynamic Shifting**: 내용이 길어질 경우 하단 단락들을 자동으로 밀어내어 겹침을 방지합니다.
-- **🛡️ 원본 무결성**: OCF 표준 준수 및 속성 보호를 통해 '파일 손상' 없이 원본 서식을 완벽하게 유지합니다.
-- **🎨 UI/UX Refinement**: Browser Native alert 대신 전용 커스텀 모달(Lucide 아이콘 기반)을 사용하여 사용자 경험을 고도화했습니다.
+- **🎨 UI/UX Refinement**: Browser Native alert 대신 전용 커스텀 모달(Lucide 아이콘 기반)을 사용하여 전문적인 사용자 경험을 제공합니다.
 - **📂 직관적인 파일명**: 다운로드 시 `신청인성함_건강보험공단제출용해촉증명서.hwpx` 형식으로 자동 생성됩니다.
 
-### 2. 백엔드 및 보안 (New)
+### 2. Backend & Security (Server-side)
 
-- **☁️ Serverless Architecture**: Vercel Serverless Function을 통해 별도의 서버 구축 없이 백엔드 로직을 처리합니다.
-- **🔒 데이터 보안**:
-  - **SSN 암호화**: 주민등록번호는 `pgcrypto`를 사용하여 AES-256 (`pgp_sym_encrypt`) 방식으로 암호화되어 DB에 저장됩니다.
-  - **Blind Index Searching**: 검색 시에는 복호화 없이 `HMAC-SHA256` 해시값(`ssn_hash`)만을 사용하여 매칭하므로, 검색 속도가 빠르고 보안성이 뛰어납니다.
-  - **네트워크 보안**: 모든 데이터 전송은 HTTPS를 통해 암호화됩니다.
+- **☁️ Serverless Architecture**: Vercel Serverless Function을 통해 별도의 서버 호스팅 없이 백엔드 로직을 처리합니다.
+- **🛡️ 강력한 데이터 보안**:
+  - **SSN 암호화**: 주민등록번호 원본은 `pgcrypto` AES-256 방식으로 암호화되어 DB(AWS EC2)에 안전하게 저장됩니다.
+  - **Blind Index Searching**: 검색 시에는 복호화 없이 `HMAC-SHA256` 해시값만을 사용하여 매칭하므로, 보안성과 성능을 동시에 확보합니다.
+  - **이중 해싱 (Upcoming)**: 클라이언트 SHA-256 + 서버 HMAC-SHA256 구조로 네트워크 구간 보안을 원천 강화합니다.
+- **🔒 원본 무결성**: OCF 표준 준수 및 XML 속성 보호를 통해 파일 손상 없이 원본 서식을 완벽하게 유지합니다.
 
 ## 📋 시스템 아키텍처
 
