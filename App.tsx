@@ -5,6 +5,17 @@ import { HWPXData, ProcessingState, FileInfo } from './types';
 import { parseHWPXContentLocal as parseHWPXContent } from './services/localParserService';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
+interface ModalConfig {
+  isOpen: boolean;
+  type: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message: React.ReactNode;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+  confirmLabel?: string;
+  cancelLabel?: string;
+}
+
 // ============================================================================
 // 공통 UI 컴포넌트 (일관성 있는 디자인 시스템)
 // ============================================================================
@@ -51,6 +62,73 @@ const Button: React.FC<
     >
       {children}
     </button>
+  );
+};
+
+const Modal: React.FC<{ config: ModalConfig; onClose: () => void }> = ({ config, onClose }) => {
+  if (!config.isOpen) return null;
+
+  const icons = {
+    success: <CheckCircle2 className="w-12 h-12 text-emerald-500" />,
+    error: <AlertCircle className="w-12 h-12 text-rose-500" />,
+    warning: <AlertTriangle className="w-12 h-12 text-amber-500" />,
+    info: <Info className="w-12 h-12 text-blue-500" />,
+  };
+
+  const colors = {
+    success: "bg-emerald-50",
+    error: "bg-rose-50",
+    warning: "bg-amber-50",
+    info: "bg-blue-50",
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"
+        onClick={() => !config.onConfirm && onClose()}
+      />
+
+      {/* Modal Content */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all animate-in fade-in zoom-in slide-in-from-bottom-4 duration-300">
+        <div className="p-6">
+          <div className="flex flex-col items-center text-center">
+            <div className={`mb-4 p-3 rounded-full ${colors[config.type]}`}>
+              {icons[config.type]}
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">{config.title}</h3>
+            <div className="text-slate-600 leading-relaxed whitespace-pre-wrap">
+              {config.message}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 p-4 flex gap-3">
+          {(config.onCancel || config.cancelLabel) && (
+            <Button
+              className="flex-1 !h-12"
+              onClick={() => {
+                config.onCancel?.();
+                onClose();
+              }}
+            >
+              {config.cancelLabel || "취소"}
+            </Button>
+          )}
+          <Button
+            variant="primary"
+            className="flex-1 !h-12"
+            onClick={() => {
+              config.onConfirm?.();
+              onClose();
+            }}
+          >
+            {config.confirmLabel || "확인"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -105,6 +183,21 @@ const App: React.FC = () => {
     isParsing: false,
     error: null,
   });
+
+  const [modalConfig, setModalConfig] = useState<ModalConfig>({
+    isOpen: false,
+    type: 'info',
+    title: '',
+    message: '',
+  });
+
+  const showModal = (config: Partial<ModalConfig>) => {
+    setModalConfig({ ...modalConfig, ...config, isOpen: true });
+  };
+
+  const closeModal = () => {
+    setModalConfig(prev => ({ ...prev, isOpen: false }));
+  };
 
   const [isVerified, setIsVerified] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -168,17 +261,22 @@ const App: React.FC = () => {
     if (!uploadedFile) return;
 
     if (uploadedFile.name.endsWith('.hwp')) {
-      setStatus(prev => ({
-        ...prev,
-        error: "이 프로그램은 .hwpx 형식만 지원합니다. .hwp 파일을 한글 프로그램에서 '다른 이름으로 저장'을 통해 '.hwpx'로 변환 후 업로드해주세요."
-      }));
+      showModal({
+        type: 'error',
+        title: '형식 미지원',
+        message: "이 프로그램은 .hwpx 형식만 지원합니다.\n.hwp 파일을 한글 프로그램에서 '다른 이름으로 저장'을 통해\n'.hwpx'로 변환 후 업로드해주세요."
+      });
       setFileInfo(null);
       setExtractedData(null);
       return;
     }
 
     if (!uploadedFile.name.endsWith('.hwpx')) {
-      setStatus(prev => ({ ...prev, error: "지원하지 않는 파일 형식입니다. .hwpx 파일을 업로드해주세요." }));
+      showModal({
+        type: 'error',
+        title: '형식 미지원',
+        message: "지원하지 않는 파일 형식입니다. .hwpx 파일을 업로드해주세요."
+      });
       return;
     }
 
@@ -259,26 +357,54 @@ const App: React.FC = () => {
       const result = await response.json();
 
       if (!result.success) {
-        alert("❌ 조회 실패: 입력하신 성함 또는 주민등록번호와 일치하는 기록을 찾을 수 없습니다. 오타가 없는지 다시 한 번 확인해 주세요.");
+        showModal({
+          type: 'error',
+          title: '등록된 정보를 찾을 수 없습니다',
+          message: '입력하신 성함과 주민등록번호가 정확한지\n다시 한번 확인해 주세요.'
+        });
         setIsVerifying(false);
         return;
       }
 
       if (result.addressMatch) {
-        // 주소 일치 (또는 DB 주소 미등록)
-        alert("✅ 정보 확인 완료: 입력하신 정보가 데이터베이스와 일치합니다. 이제 문서를 다운로드하실 수 있습니다.");
+        showModal({
+          type: 'success',
+          title: '안전하게 확인되었습니다',
+          message: '데이터베이스와 일치함이 확인되었습니다.\n이제 증명서를 다운로드하실 수 있습니다.'
+        });
         setIsVerified(true);
       } else {
-        // 주소 불일치 - 사용자 확인
-        const confirmMsg = `ℹ️ 주소 정보 상이\n\n[DB 등록 주소]: ${result.dbAddress}\n[입력하신 주소]: ${extractedData.address}\n\n입력하신 주소가 실제 거주지와 맞습니까?`;
-        if (window.confirm(confirmMsg)) {
-          setIsVerified(true);
-        }
+        showModal({
+          type: 'warning',
+          title: '주소 정보가 등록된 내용과 다릅니다',
+          message: (
+            <div className="text-left space-y-2 mt-2">
+              <div className="p-2 bg-slate-50 rounded border border-slate-100 text-xs text-slate-500">
+                <span className="font-semibold block mb-1">등록된 주소:</span>
+                {result.dbAddress}
+              </div>
+              <div className="p-2 bg-blue-50 rounded border border-blue-100 text-xs text-blue-600">
+                <span className="font-semibold block mb-1">입력하신 주소:</span>
+                {extractedData.address}
+              </div>
+              <p className="mt-4 text-sm text-center font-medium text-slate-900">
+                입력하신 주소가 실제 주소와 맞습니까?
+              </p>
+            </div>
+          ),
+          confirmLabel: '예, 맞습니다',
+          cancelLabel: '아니오',
+          onConfirm: () => setIsVerified(true)
+        });
       }
 
     } catch (err) {
       console.error("Verification failed:", err);
-      alert("검증 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+      showModal({
+        type: 'error',
+        title: '서버 연결 실패',
+        message: '검증 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'
+      });
     } finally {
       setIsVerifying(false);
     }
@@ -460,11 +586,14 @@ const App: React.FC = () => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `[수정완료]_${fileInfo?.name || 'document.hwpx'}`;
+      link.download = `${extractedData.applicant}_건강보험공단제출용해촉증명서.hwpx`;
       link.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      alert("HWPX 생성 중 오류가 발생했습니다: " + err);
+    } catch (err: any) {
+      showModal({
+        type: 'error',
+        title: '다운로드 실패',
+        message: 'HWPX 생성 중 오류가 발생했습니다: ' + (err.message || err)
+      });
     }
   };
 
@@ -738,6 +867,8 @@ const App: React.FC = () => {
         <p>미리보기에는 업체 정보가 생략되어 있으나, 다운로드 시에는 원본의 모든 정보가 포함됩니다.</p>
         <p className="mt-1">© 2025 HWPX Smart Processor • Powered by Regex-based Local Parsing</p>
       </footer>
+
+      <Modal config={modalConfig} onClose={closeModal} />
     </div>
   );
 };
