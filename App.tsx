@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import JSZip from 'jszip';
-import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar, Zap, FileType, BookOpen, X } from 'lucide-react';
+import { Upload, FileText, Edit3, Loader2, CheckCircle2, AlertCircle, Save, RotateCcw, Info, Calendar, Zap, FileType, BookOpen, X, Search, Check, AlertTriangle } from 'lucide-react';
 import { HWPXData, ProcessingState, FileInfo } from './types';
 import { parseHWPXContentLocal as parseHWPXContent } from './services/localParserService';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
@@ -38,10 +38,10 @@ const Button: React.FC<
   }>
 > = ({ variant = "secondary", disabled, className = "", children, ...props }) => {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2";
+    "inline-flex items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 h-11";
   const styles =
     variant === "primary"
-      ? "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400 disabled:bg-blue-300"
+      ? "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400 disabled:bg-blue-300 border border-transparent"
       : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 focus:ring-slate-300 disabled:text-slate-300";
   return (
     <button
@@ -106,6 +106,9 @@ const App: React.FC = () => {
     error: null,
   });
 
+  const [isVerified, setIsVerified] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+
   const [loadingMsg, setLoadingMsg] = useState("문서 구조를 파악하고 있습니다...");
   const [scale, setScale] = useState(1);
 
@@ -118,6 +121,7 @@ const App: React.FC = () => {
   };
   const containerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+
 
   // 브라우저 크기에 맞춰 A4 미리보기 크기를 자동으로 조절하는 로직
   useEffect(() => {
@@ -208,12 +212,75 @@ const App: React.FC = () => {
 
   const handleDataChange = (field: keyof HWPXData, value: string) => {
     if (!extractedData) return;
-    setExtractedData({ ...extractedData, [field]: value });
+
+    let processedValue = value;
+    if (field === 'ssn') {
+      const numbers = value.replace(/[^\d]/g, '');
+      if (numbers.length <= 6) {
+        processedValue = numbers;
+      } else {
+        processedValue = `${numbers.slice(0, 6)}-${numbers.slice(6, 13)}`;
+      }
+    }
+
+    setExtractedData({ ...extractedData, [field]: processedValue });
+    // 정보가 변경되면 검증 상태 초기화
+    if (['applicant', 'ssn', 'address'].includes(field)) {
+      setIsVerified(false);
+    }
   };
 
   const resetChanges = () => {
     if (originalExtractedData) {
       setExtractedData({ ...originalExtractedData });
+      setIsVerified(false);
+    }
+  };
+
+  const handleReview = async () => {
+    if (!extractedData) return;
+    setIsVerifying(true);
+
+    try {
+      const response = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          registrant_name: extractedData.applicant,
+          ssn: extractedData.ssn,
+          address: extractedData.address
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        alert("❌ 조회 실패: 입력하신 성함 또는 주민등록번호와 일치하는 기록을 찾을 수 없습니다. 오타가 없는지 다시 한 번 확인해 주세요.");
+        setIsVerifying(false);
+        return;
+      }
+
+      if (result.addressMatch) {
+        // 주소 일치 (또는 DB 주소 미등록)
+        alert("✅ 정보 확인 완료: 입력하신 정보가 데이터베이스와 일치합니다. 이제 문서를 다운로드하실 수 있습니다.");
+        setIsVerified(true);
+      } else {
+        // 주소 불일치 - 사용자 확인
+        const confirmMsg = `ℹ️ 주소 정보 상이\n\n[DB 등록 주소]: ${result.dbAddress}\n[입력하신 주소]: ${extractedData.address}\n\n입력하신 주소가 실제 거주지와 맞습니까?`;
+        if (window.confirm(confirmMsg)) {
+          setIsVerified(true);
+        }
+      }
+
+    } catch (err) {
+      console.error("Verification failed:", err);
+      alert("검증 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -418,9 +485,17 @@ const App: React.FC = () => {
             <Button variant="secondary" onClick={resetChanges}>
               <RotateCcw size={16} /> 초기화
             </Button>
-            <Button variant="primary" onClick={downloadUpdatedHWPX}>
-              <Save size={18} /> HWPX 다운로드
-            </Button>
+
+            {!isVerified ? (
+              <Button variant="primary" onClick={handleReview} disabled={isVerifying} className="bg-blue-600 hover:bg-blue-700 w-44">
+                {isVerifying ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
+                데이터 검토
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={downloadUpdatedHWPX} className="bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-400 w-44">
+                <Check size={18} /> 증명서 다운로드
+              </Button>
+            )}
           </div>
         )}
       </header>
@@ -520,6 +595,7 @@ const App: React.FC = () => {
                       type="text"
                       value={extractedData[field.id as keyof HWPXData]}
                       onChange={(e) => handleDataChange(field.id as keyof HWPXData, e.target.value)}
+                      maxLength={field.id === 'ssn' ? 14 : undefined}
                       className="w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition"
                     />
                   </div>

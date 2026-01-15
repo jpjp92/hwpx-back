@@ -1,77 +1,121 @@
 # HWPX 스마트 편집기 (해촉증명서)
 
-Regex 기반 로컬 파싱을 통해 HWPX 문서를 분석하고, 데이터를 수정하여 다시 저장할 수 있는 고속 문서 편집 도구입니다.
+Regex 기반 로컬 파싱을 통해 HWPX 문서를 분석하고, PostgreSQL 데이터베이스와 연동하여 실시간 검증을 제공하는 고속 문서 편집 도구입니다.
 
 ## 🚀 주요 기능
 
-- **⚡ 고속 로컬 파싱**: Regex 기반 XML 파싱으로 외부 API 호출 없이 즉시 데이터를 추출하여 뛰어난 보안성과 처리 속도를 제공합니다.
-- **🏗️ Advanced HWPX 레이아웃 엔진**: 단순 텍스트 치환을 넘어 HWPX 고유의 2D 좌표 시스템을 제어합니다.
-  - **들여쓰기(Hanging Indent)**: 주소지가 길어질 경우 두 번째 줄부터 라벨 뒷부분에 수직 정렬되도록 좌표를 자동 계산합니다.
-  - **다이내믹 쉬프팅(Dynamic Shifting)**: 텍스트가 길어져 줄이 늘어나면, 하단 단락들을 자동으로 아래로 밀어내어 내용 겹침을 방지합니다.
-  - **가시성 동기화**: `linesegarray`의 크기 속성을 실시간으로 업데이트하여, 생성된 모든 줄이 한글 프로그램에서 즉시 보이도록 보장합니다.
-- **🛡️ 원본 무결성 보존**:
-  - **OCF 표준 준수**: XML Declaration(`<?xml...?>`) 중복 방지 및 표준 ZIP 구조 유지로 '파일 손상' 오류를 원천 차단합니다.
-  - **속성 보호**: 문서의 스타일 정보인 속성값(`@_`)은 유지하고 본문 텍스트만 정밀 치환합니다.
-  - **공백 완벽 보존**: 파서의 트림 기능을 비활성화하여 원본의 미세한 들여쓰기와 공백 구조를 100% 동일하게 유지합니다.
-- **🖼️ 초정밀 미리보기 (Pixel-Perfect Preview)**:
-  - **A4 규격 재현**: 실제 A4 (ISO 216) 규격을 웹에서 구현하고, 반응형 스케일링 엔진으로 모든 화면에서 최적의 비율로 표시합니다.
-  - **1:1 스타일 이식**: 타이틀(25pt), 본문(14pt) 등 HWPX 고유 폰트 크기와 정렬 방식을 CSS Grid/Flex로 완벽히 재현했습니다.
+### 1. HWPX 처리 엔진
 
-## 📋 문서 처리 절차
+- **⚡ 고속 로컬 파싱**: Regex 기반 XML 파싱으로 외부 API 호출 없이 브라우저에서 즉시 데이터를 추출합니다.
+- **🏗️ Advanced 레이아웃 엔진**:
+  - **Hanging Indent**: 긴 주소 텍스트에 대해 자동으로 들여쓰기 좌표를 계산하여 가독성을 높입니다.
+  - **Dynamic Shifting**: 내용이 길어질 경우 하단 단락들을 자동으로 밀어내어 겹침을 방지합니다.
+- **🛡️ 원본 무결성**: OCF 표준 준수 및 속성 보호를 통해 '파일 손상' 없이 원본 서식을 완벽하게 유지합니다.
+
+### 2. 백엔드 및 보안 (New)
+
+- **☁️ Serverless Architecture**: Vercel Serverless Function을 통해 별도의 서버 구축 없이 백엔드 로직을 처리합니다.
+- **🔒 데이터 보안**:
+  - **SSN 암호화**: 주민등록번호는 `pgcrypto`를 사용하여 AES-256 (`pgp_sym_encrypt`) 방식으로 암호화되어 DB에 저장됩니다.
+  - **Blind Index Searching**: 검색 시에는 복호화 없이 `HMAC-SHA256` 해시값(`ssn_hash`)만을 사용하여 매칭하므로, 검색 속도가 빠르고 보안성이 뛰어납니다.
+  - **네트워크 보안**: 모든 데이터 전송은 HTTPS를 통해 암호화됩니다.
+
+## 📋 시스템 아키텍처
 
 ```mermaid
 flowchart TD
     subgraph Frontend ["Frontend (Browser)"]
-        U[HWPX 업로드] 
-        U --> UNZIP[XML 추출 - JSZip]
-        UNZIP --> PARSE[Regex 로컬 파싱 - Data Extraction]
-        PARSE --> PREVIEW[A4 인터랙티브 미리보기]
-        PREVIEW --> EDIT[사용자 데이터 편집]
-        EDIT --> ENGINE[레이아웃 엔진 - 좌표 재계산/들여쓰기]
-        ENGINE --> REPACK[HWPX 리패키징 - OCF 표준 준수]
+        U[HWPX 업로드] --> PARSE[로컬 파싱]
+        PARSE --> EDIT[데이터 편집]
+        EDIT --> VERIFY_REQ["검증 요청 (/api/verify)"]
+        VERIFY_RES --> REPLACE[XML 텍스트 치환]
+        REPLACE --> LAYOUT[좌표/들여쓰기 재계산]
+        LAYOUT --> REPACK[HWPX 리패키징]
         REPACK --> DL[최종 다운로드]
     end
+
+    subgraph Backend ["Backend (Serverless API)"]
+        VERIFY_REQ -- "HTTPS" --> API[Verify Function]
+        API --> HASH[HMAC-SHA256 해싱]
+        HASH --> QUERY["DB 조회 (Blind Index)"]
+    end
+
+    subgraph Database ["DB (AWS RDS)"]
+        QUERY -- "SSN Hash 매칭" --> DB[("User Registry")]
+        DB -- "검증 결과" --> API
+    end
+
+    API -- "Address Match 여부" --> VERIFY_RES
 ```
 
-### 1) HWPX 컨테이너 처리
+## �️ 데이터베이스 구조
 
-- `JSZip`을 사용하여 HWPX 패키지 내의 `section.xml`, `header.xml` 등을 분리합니다.
-- 바이너리 자산(폰트, 이미지)은 데이터 변형 없이 원본 그대로 보존합니다.
+### `hwpx_01.user_registry` (메인 테이블)
 
-### 2) 텍스트 및 레이아웃 제어
+해촉증명서 발급 대상자의 기본 정보와 암호화된 개인정보를 관리합니다.
 
-- **텍스트 치환**: `XMLParser(trimValues: false)`를 통해 원본의 미세 구조를 유지하며 데이터를 교체합니다.
-- **좌표 계산**: 가변적인 텍스트 길이에 맞춰 `vertpos`(수직 좌표)와 `horzpos`(수평 좌표)를 동적으로 재산출합니다.
-- **줄바꿈 로직**: 한글(2점), 기호(1.1점) 등 시각적 무게를 반영한 단어 마디 단위 줄바꿈 엔진을 탑재했습니다.
+| 컬럼명 | 타입 | 설명 | 보안/특이사항 |
+| :--- | :--- | :--- | :--- |
+| `id` | SERIAL | 고유 식별자 | PRIMARY KEY |
+| `manager` | TEXT | 담당자 | |
+| `payment_date` | DATE | 지급년월일 | |
+| `registrant_name` | TEXT | 신고소득자명 | **Index** (조회용) |
+| **`ssn`** | **BYTEA** | 주민등록번호 | **AES-256 암호화** 저장 (`pgcrypto`) |
+| **`ssn_hash`** | **TEXT** | 주민번호 해시 | **Blind Index** (HMAC-SHA256), **Index** |
+| `contact` | TEXT | 연락처 | |
+| `address` | TEXT | 거주주소 | |
+| `promotion_name` | TEXT | 프로모션명 | |
+| `blog_url` | TEXT | 블로그 URL | |
+| `instagram_url` | TEXT | 인스타 URL | |
+| `created_at` | TIMESTAMPTZ | 데이터 생성일 | DEFAULT NOW() |
+| `updated_at` | TIMESTAMPTZ | 데이터 수정일 | DEFAULT NOW() |
 
-## 📂 프로젝트 구조
+> [!NOTE]
+> 주민등록번호 원본(`ssn`)은 직접 조회하지 않으며, 검증 시에는 검색 인덱싱된 `ssn_hash`값과 사용자 이름(`registrant_name`)을 결합하여 매칭합니다.
+
+## �📂 프로젝트 구조
 
 ```text
 hwpx-back/
+├── api/
+│   └── verify.ts              # Vercel Serverless Function (DB 검증 로직)
 ├── services/
-│   └── localParserService.ts  # Regex 기반 고속 파싱 로직
-├── App.tsx                     # 메인 화면 및 레이아웃 엔진 (좌표 제어)
-├── types.ts                    # 데이터 모델 정의
-├── vite.config.ts              # Vite 설정
-└── README.md                   # 프로젝트 문서
+│   └── localParserService.ts  # HWPX 파싱 엔진
+├── db_data/                   # DB 마이그레이션 스크립트 및 문서
+├── App.tsx                    # 메인 UI 및 프론트엔드 로직
+└── README.md                  # 프로젝트 문서
 ```
 
 ## ⚙️ 시작하기
 
 ### 1. 요구 사항
 
-- Node.js (Latest LTS)
+- Node.js (v18+)
+- Vercel CLI (`npm i -g vercel`)
+- PostgreSQL 데이터베이스 (설정 완료됨)
 
-### 2. 설치 및 실행
+### 2. 환경 변수 설정
+
+Vercel 대시보드에 설정된 다음 변수들이 필요합니다:
+
+- `DATABASE_URL`: PostgreSQL 연결 문자열
+- `DB_ENCRYPTION_KEY`: 암호화 및 해싱에 사용되는 32byte 키
+
+### 3. 설치 및 실행
+
+**로컬 개발 시 반드시 Vercel CLI를 사용해야 API가 동작합니다.**
 
 ```bash
 # 의존성 설치
 npm install
 
-# 로컬 개발 서버 실행
-npm run dev
+# 로컬 개발 서버 실행 (API + Frontend)
+vercel dev
 ```
+
+> **Note**: `npm run dev`는 프론트엔드만 실행되므로 API 호출 시 에러가 발생합니다.
 
 ## ⚠️ 참고 사항
 
-- 본 도구는 표준 HWPX 파일만 지원하며, 구형 바이너리 (.hwp) 파일은 지원하지 않습니다. (.hwp는 한글 프로그램에서 '다른 이름으로 저장'을 통해 HWPX로 변환 후 사용 가능합니다.)
+- 본 도구는 표준 HWPX 파일만 지원합니다. (.hwp 파일은 변환 후 사용)
+- 로컬 개발 환경(`vercel dev`)에서는 DB 접속 시 네트워크 지연이 발생할 수 있으나, 배포 환경에서는 초고속으로 동작합니다.
