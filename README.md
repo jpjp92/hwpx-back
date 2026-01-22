@@ -1,33 +1,45 @@
 # HWPX 스마트 편집기 (해촉증명서)
 
-Regex 기반 로컬 파싱을 통해 HWPX 문서를 분석하고, PostgreSQL 데이터베이스와 연동하여 실시간 검증을 제공하는 고속 문서 편집 도구입니다.
+Regex 기반 로컬 파싱을 통해 HWPX 문서를 분석하고, PostgreSQL 데이터베이스와 연동하여 실시간 검증을 제공하는 문서 편집 도구입니다.
 
 ## 🚀 주요 기능
 
 ### 1. Frontend (Client-side)
 
-- **⚡ HWPX 고속 로컬 파싱**: Regex 기반 XML 파싱으로 외부 API 호출 없이 브라우저에서 즉시 데이터를 추출합니다.
+- **✨ 템플릿 기반 자동 워크플로우**: 앱 시작 시 표준 템플릿을 자동으로 로드하여 즉시 편집 가능한 상태로 전환합니다.
+- **⚡ HWPX 로컬 파싱**: Regex 기반 XML 파싱으로 외부 API 호출 없이 브라우저에서 즉시 데이터를 추출합니다.
 - **🏗️ Advanced 레이아웃 엔진**:
   - **Hanging Indent**: 긴 주소 텍스트에 대해 자동으로 들여쓰기 좌표를 계산하여 가독성을 높입니다.
   - **Dynamic Shifting**: 내용이 길어질 경우 하단 단락들을 자동으로 밀어내어 겹침을 방지합니다.
-- **🎨 UI/UX Refinement**: Browser Native alert 대신 전용 커스텀 모달(Lucide 아이콘 기반)을 사용하여 전문적인 사용자 경험을 제공합니다.
+- **🎨 UI/UX Refinement**: 리팩토링된 5:7 레이아웃과 커스텀 모달, 풀스크린 로딩 상태를 지원합니다.
 - **📂 직관적인 파일명**: 다운로드 시 `신청인성함_건강보험공단제출용해촉증명서.hwpx` 형식으로 자동 생성됩니다.
 
 ### 2. Backend & Security (Server-side)
 
 - **☁️ Serverless Architecture**: Vercel Serverless Function을 통해 별도의 서버 호스팅 없이 백엔드 로직을 처리합니다.
 - **🛡️ 강력한 데이터 보안**:
+  - **Vercel Blob Storage**: 템플릿 파일을 Git 저장소가 아닌 보안 클라우드 스토리지([Vercel Blob](https://vercel.com/docs/storage/vercel-blob))에 보관하여 원본 유출 및 관리 리스크를 최소화했습니다.
   - **SSN 암호화**: 주민등록번호 원본은 `pgcrypto` AES-256 방식으로 암호화되어 DB(AWS EC2)에 안전하게 저장됩니다.
   - **Blind Index Searching**: 검색 시에는 복호화 없이 `HMAC-SHA256` 해시값만을 사용하여 매칭하므로, 보안성과 성능을 동시에 확보합니다.
   - **이중 해싱 (Double Hashing)**: 클라이언트 SHA-256 + 서버 HMAC-SHA256 구조로 네트워크 구간에서 원본 주민번호가 노출되지 않도록 보안을 강화했습니다.
 - **🔒 원본 무결성**: OCF 표준 준수 및 XML 속성 보호를 통해 파일 손상 없이 원본 서식을 완벽하게 유지합니다.
+
+### 📄 템플릿 관리 (Template Management)
+
+본 시스템은 보안을 위해 `public` 폴더에 템플릿 파일을 두지 않고 클라우드에서 직접 로드합니다.
+
+- **저장소**: Vercel Blob Storage
+- **갱신 방법**:
+  1. 신규 `.hwpx` 템플릿을 Vercel 대시보드의 Storage 탭에서 업로드
+  2. 생성된 새로운 URL을 `src/hooks/useTemplateLoader.ts` 내의 `fetch` 주소에 반영
+- **장점**: Git 저장소에 민감한 양식이 포함되지 않아 보안성이 높고, 배포 없이도 템플릿 교체가 가능합니다.
 
 ## 📋 시스템 아키텍처
 
 ```mermaid
 flowchart TD
     subgraph Frontend ["Frontend (Browser)"]
-        U[HWPX 업로드] --> PARSE[로컬 파싱]
+        CLOUD[Vercel Blob Store] -- "템플릿 자동 로드" --> PARSE[로컬 파싱]
         PARSE --> EDIT[데이터 편집]
         EDIT --> HASH_CLIENT["1차 해싱 (SHA-256)"]
         HASH_CLIENT --> VERIFY_REQ["검증 요청 (/api/verify)"]
@@ -107,7 +119,8 @@ hwpx-back/
 │   │       └── Modal.tsx      # 커스텀 모달 (성공/에러/경고)
 │   ├── hooks/                 # 커스텀 React 훅
 │   │   ├── useModal.ts        # 모달 상태 관리
-│   │   └── useFileUpload.ts   # 파일 업로드 로직
+│   │   ├── useTemplateLoader.ts # [NEW] 템플릿 자동 로딩 및 파싱
+│   │   └── useFileUpload.ts   # [DEPRECATED] 파일 업로드 (참조용 유지)
 │   └── utils/                 # 유틸리티 함수
 │       ├── crypto.ts          # SHA-256 해싱
 │       ├── xml.ts             # XML 텍스트 치환
@@ -118,24 +131,10 @@ hwpx-back/
 ├── services/
 │   └── localParserService.ts  # HWPX 파싱 엔진 (Regex 기반)
 ├── db_data/                   # DB 마이그레이션 스크립트 및 문서
-├── App.tsx                    # 메인 애플리케이션 (660줄, 27% 감소)
+├── App.tsx                    # 메인 애플리케이션
 ├── types.ts                   # TypeScript 타입 정의
 └── README.md                  # 프로젝트 문서
 ```
-
-### 🏗️ 아키텍처 개선 (2026-01-15 리팩토링)
-
-**모듈화 원칙:**
-
-- **관심사 분리 (SoC)**: UI, 비즈니스 로직, 유틸리티를 독립된 모듈로 분리
-- **재사용성**: 컴포넌트와 훅을 다른 프로젝트에서도 활용 가능
-- **유지보수성**: 각 모듈이 단일 책임을 가지도록 설계
-
-**코드 최적화:**
-
-- 원본: 901줄 (단일 파일)
-- 리팩토링 후: 660줄 (9개 모듈로 분산)
-- 감소율: 약 27%
 
 ## ⚙️ 시작하기
 
