@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import JSZip from 'jszip';
-import { Upload, FileText, Edit3, Loader2, Save, RotateCcw, Calendar, Zap, FileType, BookOpen, Search, Check, Info, CheckCircle2, X, AlertCircle, RefreshCw } from 'lucide-react';
-import { HWPXData } from './types';
+import { FileText, Loader2, RotateCcw, Search, AlertCircle, RefreshCw, Download, Info } from 'lucide-react';
+import { HWPXData, PeriodSelection } from './types';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
-import Card from './src/components/ui/Card';
-import SectionHeader from './src/components/ui/SectionHeader';
 import Button from './src/components/ui/Button';
 import Modal, { ModalConfig } from './src/components/ui/Modal';
 import { hashSSN } from './src/utils/crypto';
@@ -12,6 +10,8 @@ import { replaceTextInObject } from './src/utils/xml';
 import { getCharWeight, LAYOUT_CONSTANTS } from './src/utils/hwpx/layout';
 import { getTodayKST } from './src/utils/date';
 import { useTemplateLoader } from './src/hooks/useTemplateLoader';
+import EditorForm from './src/components/forms/EditorForm';
+import DocumentPreview from './src/components/preview/DocumentPreview';
 
 const App: React.FC = () => {
   // 모달 상태 관리
@@ -52,33 +52,29 @@ const App: React.FC = () => {
 
   const [isVerified, setIsVerified] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
-  const [scale, setScale] = useState(1);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
+
+  // 용역기간 조회 범위 선택 상태
+  const [periodSelection, setPeriodSelection] = useState<PeriodSelection>({
+    year: String(new Date().getFullYear()),
+    startMonth: '01',
+    endMonth: '12'
+  });
 
 
-  // 브라우저 크기에 맞춰 A4 미리보기 크기를 자동으로 조절하는 로직
-  useEffect(() => {
-    const updateScale = () => {
-      if (containerRef.current) {
-        // 컨테이너 너비에서 적절한 여백을 뺀 값 기준
-        const containerWidth = containerRef.current.clientWidth - 48;
-        const a4Width = 794; // 약 210mm를 픽셀로 환산 (96dpi 기준)
-        const newScale = Math.min(containerWidth / a4Width, 1);
-        setScale(newScale);
-      }
-    };
-    window.addEventListener('resize', updateScale);
-    // 초기 실행 및 데이터 추출 완료 시 업데이트
-    updateScale();
-    // 약간의 지연 후 재계산 (레이아웃 렌더링 시간 고려)
-    const timer = setTimeout(updateScale, 100);
-    return () => {
-      window.removeEventListener('resize', updateScale);
-      clearTimeout(timer);
-    };
-  }, [extractedData]);
+  // 용역기간 선택 핸들러
+  const handlePeriodChange = (key: keyof PeriodSelection, value: string) => {
+    const newSelection = { ...periodSelection, [key]: value };
+    setPeriodSelection(newSelection);
 
+    if (extractedData) {
+      // 미리보기에 선택된 범위 표시 (조회 전 상태임을 명시)
+      setExtractedData({
+        ...extractedData,
+        servicePeriod: `${newSelection.year}년 ${newSelection.startMonth}월 ~ ${newSelection.year}년 ${newSelection.endMonth}월 (조회하여 확정)`
+      });
+      setIsVerified(false);
+    }
+  };
 
   const handleDataChange = (field: keyof HWPXData, value: string) => {
     if (!extractedData) return;
@@ -100,6 +96,7 @@ const App: React.FC = () => {
     }
   };
 
+
   const resetChanges = () => {
     if (originalExtractedData) {
       setExtractedData({ ...originalExtractedData });
@@ -113,6 +110,19 @@ const App: React.FC = () => {
     // 빈값 체크 - 사용자 요청 사항 (서버 연결 에러 대신 정보 없음 알럿 노출)
     // SSN의 경우 하이픈을 제외한 숫자가 있는지 확인
     const cleanSsn = extractedData.ssn.replace(/-/g, '').trim();
+
+    // 1. 용도 미선택 체크
+    if (!extractedData.purpose.trim()) {
+      showModal({
+        type: 'warning',
+        title: '용도 미선택',
+        message: '용도(제출 기관)를 선택해 주세요.',
+        confirmLabel: '확인'
+      });
+      return;
+    }
+
+    // 2. 필수 정보(성함, 주민번호) 누락 체크
     if (!extractedData.applicant.trim() || !cleanSsn) {
       showModal({
         type: 'error',
@@ -134,8 +144,9 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           registrant_name: extractedData.applicant,
-          ssn: hashedSsn, // <-- 원본 대신 해시값 전송
-          address: extractedData.address
+          ssn: hashedSsn,
+          address: extractedData.address,
+          searchRange: periodSelection // 기간 조회 조건 추가
         })
       });
 
@@ -167,29 +178,96 @@ const App: React.FC = () => {
         return;
       }
 
+      // 용역기간 조회 결과 체크 (주소 검증은 성공했어도 기간이 없을 수 있음)
+      if (!result.servicePeriod) {
+        showModal({
+          type: 'warning',
+          title: '해당 기간의 용역 이력이 없습니다',
+          message: `${periodSelection.year}년 ${periodSelection.startMonth}월 ~ ${periodSelection.endMonth}월 사이에\n지급된 내역을 찾을 수 없습니다.\n기간을 다시 선택해 주세요.`,
+          confirmLabel: '확인'
+        });
+        setIsVerifying(false); // 검증 실패 처리
+        return;
+      }
+
+      // 용역기간 업데이트
+      const updatedData = { ...extractedData, servicePeriod: result.servicePeriod };
+      setExtractedData(updatedData);
+
+      const PaymentDatesList = ({ dates }: { dates: string[] }) => (
+        <div className="p-3 bg-slate-50 rounded border border-slate-100">
+          <div className="text-xs font-semibold text-slate-500 mb-2">
+            확인된 지급 내역 ({dates.length}건):
+          </div>
+          <div className="max-h-32 overflow-y-auto space-y-1">
+            {dates.map((date, idx) => (
+              <div key={idx} className="text-sm font-medium text-slate-700 flex items-center justify-between px-1">
+                <span>{date}</span>
+                <span className="text-xs text-slate-400">지급 완료</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+
       if (result.addressMatch) {
         showModal({
           type: 'success',
-          title: '정상적으로 확인되었습니다',
-          message: '입력하신 정보가 데이터와 일치합니다.\n이제 증명서를 다운로드하실 수 있습니다.'
+          title: '정보 확인 및 기간 산출 완료',
+          message: (
+            <div className="text-center">
+              <p className="mb-2">주소 정보가 일치하며,<br />용역기간이 자동으로 산출되었습니다.</p>
+              <div className="text-blue-600 font-bold text-lg mb-2">{result.servicePeriod}</div>
+              {result.paymentDates && result.paymentDates.length > 0 && (
+                <div className="mt-3 text-left">
+                  <div className="text-xs font-bold text-slate-700 mb-1 ml-1">상세 지급 내역</div>
+                  <PaymentDatesList dates={result.paymentDates} />
+                </div>
+              )}
+            </div>
+          )
         });
         setIsVerified(true);
       } else {
         showModal({
           type: 'warning',
-          title: '주소 정보가 등록된 내용과 다릅니다',
+          title: '정보 검토가 필요합니다',
           message: (
-            <div className="text-left space-y-2 mt-2">
-              <div className="p-2 bg-slate-50 rounded border border-slate-100 text-xs text-slate-500">
-                <span className="font-semibold block mb-1">등록된 주소:</span>
-                {result.dbAddress}
+            <div className="text-left mt-2">
+
+              {/* Section 1: Address */}
+              <div className="mb-4">
+                <h5 className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1">
+                  1. 주소 정보 비교
+                </h5>
+                <div className="space-y-2">
+                  <div className="p-3 bg-slate-50 rounded border border-slate-100 text-xs text-slate-500">
+                    <span className="font-semibold block mb-1">등록된 주소:</span>
+                    {result.dbAddress}
+                  </div>
+                  <div className="p-3 bg-blue-50 rounded border border-blue-100 text-xs text-blue-600">
+                    <span className="font-semibold block mb-1">입력하신 주소:</span>
+                    {extractedData.address}
+                  </div>
+                </div>
               </div>
-              <div className="p-2 bg-blue-50 rounded border border-blue-100 text-xs text-blue-600">
-                <span className="font-semibold block mb-1">입력하신 주소:</span>
-                {extractedData.address}
+
+              {/* Section 2: Payment History */}
+              <div className="mb-5">
+                <h5 className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1">
+                  2. 지급 내역 확인
+                </h5>
+                {result.paymentDates && result.paymentDates.length > 0 ? (
+                  <PaymentDatesList dates={result.paymentDates} />
+                ) : (
+                  <div className="p-3 bg-red-50 text-red-600 text-xs rounded border border-red-100 text-center">
+                    표시할 지급 내역이 없습니다.
+                  </div>
+                )}
               </div>
-              <p className="mt-4 text-sm text-center font-medium text-slate-900">
-                입력하신 주소가 실제 주소와 맞습니까?
+
+              <p className="border-t border-slate-100 pt-4 text-sm text-center font-medium text-slate-900 leading-snug">
+                표시된 주소와 지급 내역이 일치합니까?
               </p>
             </div>
           ),
@@ -223,6 +301,11 @@ const App: React.FC = () => {
       const finalExtractedData = { ...extractedData };
       if (!finalExtractedData.issueDate || !finalExtractedData.issueDate.trim()) {
         finalExtractedData.issueDate = getTodayKST();
+      }
+
+      // 용도 필드: 선택된 값 뒤에 " 제출" 자동 추가
+      if (finalExtractedData.purpose) {
+        finalExtractedData.purpose = `${finalExtractedData.purpose} 제출`;
       }
 
       const parser = new XMLParser({
@@ -431,29 +514,35 @@ const App: React.FC = () => {
       <header className="w-full max-w-7xl mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <FileText className="text-blue-600" /> 한글문서 편집기
+            <FileText className="text-blue-600" /> 해촉증명서 편집기
           </h1>
-          <p className="text-slate-500 text-sm mt-1 ml-1">
-            해촉증명서 편집기
-          </p>
         </div>
 
         {extractedData && (
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={resetChanges}>
+            <Button variant="destructive" onClick={resetChanges} className="w-[160px]">
               <RotateCcw size={16} /> 초기화
             </Button>
 
-            {!isVerified ? (
-              <Button variant="primary" onClick={handleReview} disabled={isVerifying} className="bg-blue-600 hover:bg-blue-700 w-44">
-                {isVerifying ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
-                데이터 검토
-              </Button>
-            ) : (
-              <Button variant="primary" onClick={downloadUpdatedHWPX} className="bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-400 w-44">
-                <Check size={18} /> 증명서 다운로드
-              </Button>
-            )}
+            <Button
+              variant="primary"
+              onClick={
+                isVerified
+                  ? downloadUpdatedHWPX
+                  : handleReview
+              }
+              className={`w-[160px] ${isVerified ? "bg-green-600 hover:bg-green-700" : ""}`}
+            >
+              {isVerified ? (
+                <>
+                  <Download size={16} /> 증명서 다운로드
+                </>
+              ) : (
+                <>
+                  <Search size={16} /> 데이터 검토
+                </>
+              )}
+            </Button>
           </div>
         )}
       </header>
@@ -461,173 +550,62 @@ const App: React.FC = () => {
       <main className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-5 space-y-6">
           {extractedData && (
-            <Card className="p-5 animate-in fade-in slide-in-from-left-4 duration-500">
-              <SectionHeader
-                title={
-                  <div className="flex items-center gap-2">
-                    <Edit3 size={16} className="text-blue-600" />
-                    <span>증명서 내용 수정</span>
-                  </div>
-                }
-                subtitle="미리보기는 입력값과 연동되며, 다운로드 시 원문 구조를 유지한 채 텍스트만 치환됩니다."
-              />
-
-              <div className="mt-5 space-y-3">
-                {[
-                  { id: 'applicant', label: '신청인' },
-                  { id: 'ssn', label: '주민등록번호' },
-                  { id: 'address', label: '주소지' },
-                  { id: 'servicePeriod', label: '용역기간' },
-                  { id: 'serviceContent', label: '용역내용' },
-                  { id: 'purpose', label: '용도' },
-                  { id: 'issueDate', label: '증명서 발급일' },
-                ].map((field) => (
-                  <div key={field.id}>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5 flex justify-between items-center">
-                      <span>{field.label}</span>
-                      {field.id === 'issueDate' && (
-                        <span className="text-[10px] text-blue-500 font-normal bg-blue-50 px-1.5 py-0.5 rounded">자동 설정됨</span>
-                      )}
-                    </label>
-                    <input
-                      type="text"
-                      value={extractedData[field.id as keyof HWPXData]}
-                      onChange={(e) => handleDataChange(field.id as keyof HWPXData, e.target.value)}
-                      maxLength={field.id === 'ssn' ? 14 : undefined}
-                      className="w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition"
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-                입력값은 치환 대상 텍스트에만 적용되며, 차트/표/서식 등 문서 구조는 변경되지 않습니다.
-              </div>
-            </Card>
+            <EditorForm
+              data={extractedData}
+              periodSelection={periodSelection}
+              onDataChange={handleDataChange}
+              onPeriodChange={handlePeriodChange}
+            />
           )}
 
-          <div className="p-5 bg-blue-50/50 border border-blue-100 rounded-2xl">
-            <h4 className="text-sm font-bold text-blue-900 flex items-center gap-2 mb-2">
-              <Info size={16} /> 템플릿 안내
+          <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl">
+            <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
+              <Info size={16} className="text-blue-600" /> 편집 안내
             </h4>
-            <p className="text-xs text-blue-700 leading-relaxed md:leading-6">
-              표준 해촉증명서 양식이 자동으로 로드되었습니다. <br />
-              좌측 입력란의 내용을 수정하면 우측 미리보기에 즉시 반영됩니다. <br />
-              모든 작업이 완료되면 '증명서 다운로드' 버튼을 클릭하세요.
-            </p>
+            <ul className="text-xs text-slate-600 space-y-2.5">
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                <span>
+                  표준 해촉증명서 양식이 자동으로 적용되었습니다.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                <span className="leading-relaxed">
+                  <span className="font-semibold text-slate-700">용역기간</span> 선택 시 날짜가 자동 입력되며, <span className="font-semibold text-slate-700">용도(제출 기관)</span>는 필수 선택 사항입니다.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                <span className="leading-relaxed">
+                  입력하신 내용은 <span className="text-blue-600 font-bold">글자만 변경</span>되며,
+                  문서의 표나 서식은 <span className="text-slate-900 font-bold">그대로 유지</span>됩니다.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                <span>
+                  상단의 <b>[데이터 검토]</b> 완료 후, 활성화된 <b className="text-green-600">[증명서 다운로드]</b> 버튼을 눌러 파일을 저장하세요.
+                </span>
+              </li>
+            </ul>
           </div>
         </div>
 
         <div className="lg:col-span-7 h-full">
-          <Card className="p-5 h-full flex flex-col">
-            <SectionHeader
-              title={
-                <div className="flex items-center gap-2">
-                  <BookOpen size={16} className="text-blue-600" />
-                  <span>문서 미리보기</span>
-                </div>
-              }
-              right={
-                <div className="group relative">
-                  <Info size={14} className="text-slate-300 cursor-help" />
-                  <div className="absolute right-0 bottom-full mb-2 w-64 p-2 bg-slate-800 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30">
-                    템플릿 문서의 핵심 텍스트가 치환된 결과를 A4 기준으로 확인합니다.
-                  </div>
-                </div>
-              }
-            />
-
-            <div
-              ref={containerRef}
-              className="mt-4 flex-1 flex flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6 min-h-[600px] overflow-y-auto overflow-x-hidden relative scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent"
-            >
-              {/* Preview Content */}
-              {extractedData && (
-                <div
-                  className="origin-top transition-transform duration-300 shadow-xl ring-1 ring-slate-900/5 mb-1"
-                  style={{
-                    transform: `scale(${scale})`,
-                    height: `calc((297mm * ${scale}) + 40px)`
-                  }}
-                >
-                  <div
-                    ref={previewRef}
-                    className="w-[210mm] bg-white min-h-[297mm] p-[30mm] flex flex-col text-black leading-tight serif-doc relative overflow-hidden select-none"
-                  >
-                    {/* Paper Texture */}
-                    <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]"></div>
-
-                    {/* Content */}
-                    <div className="relative flex-1 flex flex-col h-full z-10">
-                      <div className="text-center mt-[20mm] mb-[45mm]">
-                        <h1 className="text-[28pt] font-bold inline-block border-b-[1px] border-black pb-2 px-4">해 &nbsp; 촉 &nbsp; 증 &nbsp; 명 &nbsp; 서</h1>
-                      </div>
-
-                      <div className="space-y-[12mm] text-[15pt] pl-[5mm] pr-[5mm]">
-                        <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                          <div className="whitespace-nowrap flex justify-between h-full"><span>신</span><span>청</span><span>인</span></div>
-                          <div className="text-center">:</div>
-                          <div className="font-semibold">{extractedData.applicant}</div>
-                        </div>
-                        <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                          <div className="whitespace-nowrap">주 민 등 록 번 호</div>
-                          <div className="text-center">:</div>
-                          <div className="font-semibold">{extractedData.ssn}</div>
-                        </div>
-                        <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                          <div className="whitespace-nowrap flex justify-between"><span>주</span><span>소</span><span>지</span></div>
-                          <div className="text-center">:</div>
-                          <div className="font-semibold break-words word-break-keep-all">{extractedData.address}</div>
-                        </div>
-                        <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                          <div className="whitespace-nowrap flex justify-between"><span>용</span><span>역</span><span>기</span><span>간</span></div>
-                          <div className="text-center">:</div>
-                          <div className="font-semibold">{extractedData.servicePeriod}</div>
-                        </div>
-                        <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                          <div className="whitespace-nowrap flex justify-between"><span>용</span><span>역</span><span>내</span><span>용</span></div>
-                          <div className="text-center">:</div>
-                          <div className="font-semibold">{extractedData.serviceContent}</div>
-                        </div>
-                        <div className="grid grid-cols-[40mm_10mm_1fr] items-start leading-[1.6]">
-                          <div className="whitespace-nowrap flex justify-between"><span>용</span><span>도</span></div>
-                          <div className="text-center">:</div>
-                          <div className="font-semibold">{extractedData.purpose}</div>
-                        </div>
-                      </div>
-
-                      <div className="mt-[50mm] mb-[30mm] flex flex-col items-end pr-[15mm] w-full">
-                        <div className="text-[15pt] font-medium mb-[40mm]">
-                          위의 사실을 증명합니다.
-                        </div>
-                        <div className="text-[16pt] font-bold tracking-[0.1em]">
-                          {extractedData.issueDate}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Corner Marks */}
-                    <div className="absolute top-[10mm] left-[10mm] w-[15mm] h-[15mm] border-t-2 border-l-2 border-slate-100"></div>
-                    <div className="absolute top-[10mm] right-[10mm] w-[15mm] h-[15mm] border-t-2 border-r-2 border-slate-100"></div>
-                    <div className="absolute bottom-[10mm] left-[10mm] w-[15mm] h-[15mm] border-b-2 border-l-2 border-slate-100"></div>
-                    <div className="absolute bottom-[10mm] right-[10mm] w-[15mm] h-[15mm] border-b-2 border-r-2 border-slate-100"></div>
-                  </div>
-                </div>
-              )}
-
-
-            </div>
-          </Card>
+          {extractedData && (
+            <DocumentPreview data={extractedData} />
+          )}
         </div>
       </main>
 
-      <footer className="w-full mt-12 py-8 text-center text-slate-400 text-xs">
-        <p>미리보기에는 업체 정보가 생략되어 있으나, 다운로드 시에는 원본의 모든 정보가 포함됩니다.</p>
-        <p className="mt-1">© 2025 HWPX Smart Processor • Powered by Regex-based Local Parsing</p>
+
+      <footer className="mt-16 py-8 text-center text-slate-400 text-sm">
+        <p>© 2025 HWPX Smart Editor</p>
       </footer>
 
       <Modal config={modalConfig} onClose={closeModal} />
-    </div>
+    </div >
   );
 };
 

@@ -24,3 +24,9 @@ export interface FileInfo {
   size: number;
   lastModified: number;
 }
+
+export interface PeriodSelection {
+  year: string;
+  startMonth: string;
+  endMonth: string;
+}
