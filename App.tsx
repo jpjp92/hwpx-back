@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import JSZip from 'jszip';
-import { Upload, FileText, Edit3, Loader2, Save, RotateCcw, Calendar, Zap, FileType, BookOpen, Search, Check, Info, CheckCircle2, X, AlertCircle } from 'lucide-react';
+import { Upload, FileText, Edit3, Loader2, Save, RotateCcw, Calendar, Zap, FileType, BookOpen, Search, Check, Info, CheckCircle2, X, AlertCircle, RefreshCw } from 'lucide-react';
 import { HWPXData } from './types';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import Card from './src/components/ui/Card';
@@ -10,15 +10,8 @@ import Modal, { ModalConfig } from './src/components/ui/Modal';
 import { hashSSN } from './src/utils/crypto';
 import { replaceTextInObject } from './src/utils/xml';
 import { getCharWeight, LAYOUT_CONSTANTS } from './src/utils/hwpx/layout';
-import { useFileUpload } from './src/hooks/useFileUpload';
-
-// ============================================================================
-// UI 컴포넌트는 components/ui/ 폴더로 분리되었습니다
-// ============================================================================
-
-// ============================================================================
-// 유틸리티 함수는 src/utils/ 폴더로 분리되었습니다
-// ============================================================================
+import { getTodayKST } from './src/utils/date';
+import { useTemplateLoader } from './src/hooks/useTemplateLoader';
 
 const App: React.FC = () => {
   // 모달 상태 관리
@@ -46,18 +39,16 @@ const App: React.FC = () => {
     setModalConfig(prev => ({ ...prev, isOpen: false }));
   };
 
-  // 파일 업로드 훅 사용
+  // 템플릿 로더 훅 사용
   const {
-    fileInfo,
     extractedData,
     originalExtractedData,
     originalZip,
-    status,
-    handleFileUpload,
-    handleCancelUpload,
+    isLoading,
+    error: loadError,
+    retryLoad,
     setExtractedData,
-    setOriginalExtractedData,
-  } = useFileUpload(showModal);
+  } = useTemplateLoader();
 
   const [isVerified, setIsVerified] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -89,9 +80,6 @@ const App: React.FC = () => {
   }, [extractedData]);
 
 
-
-  // handleFileUpload는 useFileUpload 훅에서 제공됨
-
   const handleDataChange = (field: keyof HWPXData, value: string) => {
     if (!extractedData) return;
 
@@ -121,6 +109,20 @@ const App: React.FC = () => {
 
   const handleReview = async () => {
     if (!extractedData) return;
+
+    // 빈값 체크 - 사용자 요청 사항 (서버 연결 에러 대신 정보 없음 알럿 노출)
+    // SSN의 경우 하이픈을 제외한 숫자가 있는지 확인
+    const cleanSsn = extractedData.ssn.replace(/-/g, '').trim();
+    if (!extractedData.applicant.trim() || !cleanSsn) {
+      showModal({
+        type: 'error',
+        title: '등록된 정보를 찾을 수 없습니다',
+        message: '입력하신 성함과 주민등록번호가 정확한지\n다시 한번 확인해 주세요.',
+        confirmLabel: '확인'
+      });
+      return;
+    }
+
     setIsVerifying(true);
 
     try {
@@ -138,6 +140,15 @@ const App: React.FC = () => {
       });
 
       if (!response.ok) {
+        if (response.status === 400) {
+          showModal({
+            type: 'error',
+            title: '등록된 정보를 찾을 수 없습니다',
+            message: '입력하신 성함과 주민등록번호가 정확한지\n다시 한번 확인해 주세요.',
+            confirmLabel: '확인'
+          });
+          return;
+        }
         throw new Error(`Server error: ${response.status}`);
       }
 
@@ -208,6 +219,12 @@ const App: React.FC = () => {
       const files = Object.keys(originalZip.files);
       const editableKeys: (keyof HWPXData)[] = ['applicant', 'ssn', 'address', 'servicePeriod', 'serviceContent', 'purpose', 'issueDate'];
 
+      // 증명서 발급일이 비어있을 경우 오늘 날짜로 자동 설정
+      const finalExtractedData = { ...extractedData };
+      if (!finalExtractedData.issueDate || !finalExtractedData.issueDate.trim()) {
+        finalExtractedData.issueDate = getTodayKST();
+      }
+
       const parser = new XMLParser({
         ignoreAttributes: false,
         attributeNamePrefix: "@_",
@@ -237,7 +254,7 @@ const App: React.FC = () => {
           // 1. Text Replacement
           editableKeys.forEach((k) => {
             const originalVal = originalExtractedData[k];
-            const currentVal = extractedData[k];
+            const currentVal = finalExtractedData[k];
             if (originalVal && currentVal && originalVal !== currentVal) {
               jsonObj = replaceTextInObject(jsonObj, originalVal, currentVal);
             }
@@ -370,7 +387,7 @@ const App: React.FC = () => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${extractedData.applicant}_건강보험공단제출용해촉증명서.hwpx`;
+      link.download = `${finalExtractedData.applicant}_건강보험공단제출용해촉증명서.hwpx`;
       link.click();
     } catch (err: any) {
       showModal({
@@ -383,13 +400,41 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex flex-col items-center">
+      {/* Loading Screen Overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-white/95 backdrop-blur-md z-[100] flex flex-col items-center justify-center animate-in fade-in duration-300">
+          <div className="relative">
+            <div className="absolute inset-0 bg-blue-100 rounded-full blur-2xl opacity-50 animate-pulse"></div>
+            <Loader2 className="animate-spin text-blue-600 relative z-10" size={64} strokeWidth={1.5} />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mt-8 mb-2">증명서 양식을 준비하고 있습니다</h2>
+          <p className="text-slate-500 font-medium">잠시만 기다려 주세요...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {loadError && (
+        <div className="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+          <div className="bg-red-50 p-6 rounded-3xl border border-red-100 max-w-md w-full shadow-xl shadow-red-500/5">
+            <div className="w-20 h-20 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <AlertCircle size={40} className="text-red-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 mb-3">템플릿을 불러올 수 없습니다</h2>
+            <p className="text-slate-600 mb-8 leading-relaxed whitespace-pre-wrap">{loadError}</p>
+            <Button onClick={retryLoad} className="w-full bg-slate-900 hover:bg-slate-800 text-white h-12 rounded-xl text-base font-semibold transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2">
+              <RefreshCw size={18} /> 서버에서 다시 불러오기
+            </Button>
+          </div>
+        </div>
+      )}
+
       <header className="w-full max-w-7xl mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <FileText className="text-blue-600" /> 한글문서 편집기
           </h1>
           <p className="text-slate-500 text-sm mt-1 ml-1">
-            해촉증명서 데이터 치환 시스템
+            해촉증명서 편집기
           </p>
         </div>
 
@@ -414,70 +459,7 @@ const App: React.FC = () => {
       </header>
 
       <main className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-4 space-y-6">
-          <Card className="p-5">
-            <SectionHeader
-              title={
-                <div className="flex items-center gap-2">
-                  <Upload size={16} className="text-blue-600" />
-                  <span>문서 업로드</span>
-                </div>
-              }
-              right={
-                <div className="group relative">
-                  <Info size={14} className="text-slate-300 cursor-help" />
-                  <div className="absolute right-0 bottom-full mb-2 w-64 p-2 bg-slate-800 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30">
-                    .hwpx 형식만 지원하며, .hwp는 한글에서 HWPX로 변환 후 업로드합니다.
-                  </div>
-                </div>
-              }
-            />
-
-            <div className="mt-4">
-              {!fileInfo ? (
-                <div className="relative border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-white hover:border-blue-400 transition-colors cursor-pointer">
-                  <input type="file" accept=".hwpx" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-50 text-slate-500 mb-3">
-                    <Upload size={22} />
-                  </div>
-                  <p className="text-sm font-semibold text-slate-800">HWPX 파일을 선택하세요</p>
-                  <p className="mt-1 text-xs text-slate-500">드래그 앤 드롭 또는 클릭하여 업로드</p>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white">
-                    <FileText size={18} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 truncate">{fileInfo.name}</p>
-                    <p className="text-xs text-slate-500">{(fileInfo.size / 1024).toFixed(1)} KB</p>
-                  </div>
-                  {status.isParsing ? (
-                    <Loader2 className="animate-spin text-blue-600" size={18} />
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="text-emerald-500" size={18} />
-                      <button
-                        onClick={handleCancelUpload}
-                        className="p-1 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hover:text-slate-600"
-                        title="파일 취소"
-                      >
-                        <X size={18} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {status.error && (
-                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-sm text-red-700">
-                  <AlertCircle size={18} className="shrink-0 mt-0.5" />
-                  <span className="leading-relaxed">{status.error}</span>
-                </div>
-              )}
-            </div>
-          </Card>
-
+        <div className="lg:col-span-5 space-y-6">
           {extractedData && (
             <Card className="p-5 animate-in fade-in slide-in-from-left-4 duration-500">
               <SectionHeader
@@ -501,8 +483,11 @@ const App: React.FC = () => {
                   { id: 'issueDate', label: '증명서 발급일' },
                 ].map((field) => (
                   <div key={field.id}>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5">
-                      {field.label}
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5 flex justify-between items-center">
+                      <span>{field.label}</span>
+                      {field.id === 'issueDate' && (
+                        <span className="text-[10px] text-blue-500 font-normal bg-blue-50 px-1.5 py-0.5 rounded">자동 설정됨</span>
+                      )}
                     </label>
                     <input
                       type="text"
@@ -520,9 +505,20 @@ const App: React.FC = () => {
               </div>
             </Card>
           )}
+
+          <div className="p-5 bg-blue-50/50 border border-blue-100 rounded-2xl">
+            <h4 className="text-sm font-bold text-blue-900 flex items-center gap-2 mb-2">
+              <Info size={16} /> 템플릿 안내
+            </h4>
+            <p className="text-xs text-blue-700 leading-relaxed md:leading-6">
+              표준 해촉증명서 양식이 자동으로 로드되었습니다. <br />
+              좌측 입력란의 내용을 수정하면 우측 미리보기에 즉시 반영됩니다. <br />
+              모든 작업이 완료되면 '증명서 다운로드' 버튼을 클릭하세요.
+            </p>
+          </div>
         </div>
 
-        <div className="lg:col-span-8 h-full">
+        <div className="lg:col-span-7 h-full">
           <Card className="p-5 h-full flex flex-col">
             <SectionHeader
               title={
@@ -535,7 +531,7 @@ const App: React.FC = () => {
                 <div className="group relative">
                   <Info size={14} className="text-slate-300 cursor-help" />
                   <div className="absolute right-0 bottom-full mb-2 w-64 p-2 bg-slate-800 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30">
-                    업로드한 문서의 핵심 텍스트가 치환된 결과를 A4 기준으로 확인합니다.
+                    템플릿 문서의 핵심 텍스트가 치환된 결과를 A4 기준으로 확인합니다.
                   </div>
                 </div>
               }
@@ -545,28 +541,6 @@ const App: React.FC = () => {
               ref={containerRef}
               className="mt-4 flex-1 flex flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6 min-h-[600px] overflow-y-auto overflow-x-hidden relative scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent"
             >
-              {/* Loading Overlay - Simplified */}
-              {(status.isUnzipping || status.isParsing) && (
-                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/85 backdrop-blur-sm">
-                  <Loader2 className="animate-spin text-blue-600" size={28} />
-                  <p className="mt-3 text-sm font-semibold text-slate-800">
-                    문서를 불러오는 중입니다.
-                  </p>
-                </div>
-              )}
-
-              {/* Placeholder (Empty State) */}
-              {!fileInfo && !status.isParsing && !status.isUnzipping && (
-                <div className="w-full h-full flex flex-col items-center justify-center text-center p-8">
-                  <div className="w-16 h-16 bg-slate-50 rounded-xl flex items-center justify-center mb-4">
-                    <FileType size={28} className="text-slate-400" />
-                  </div>
-                  <h3 className="text-sm font-semibold text-slate-700 mb-1">문서 미리보기</h3>
-                  <p className="text-xs text-slate-500">
-                    파일을 업로드하면 이곳에 문서가 표시됩니다.
-                  </p>
-                </div>
-              )}
               {/* Preview Content */}
               {extractedData && (
                 <div
