@@ -43,10 +43,22 @@ export const useTemplateLoader = (): UseTemplateLoaderReturn => {
             const xmlText = await zip.file(sectionFiles[0])!.async("string");
             const data = await parseHWPXContent(xmlText);
 
+            // 초기 데이터 정제: 용도 필드는 항상 초기화 (사용자 선택 유도) 및 유효성 검사
+            const initialData = { ...data };
+            const VALID_PURPOSES = ['국민건강보험공단', '국민연금공단'];
+
+            // 템플릿에 저장된 값이 유효하지 않거나, 이미 '제출'이 붙어있는 등의 경우를 대비해
+            // 초기 로드 시에는 용도를 비워두는 것이 안전합니다.
+            // 만약 템플릿의 값을 살리고 싶다면 아래 조건을 수정해야 합니다.
+            // 현재 정책: 초기화/로드 시 용도는 '선택' 상태(빈 값)로 시작.
+            initialData.purpose = "";
+
+            // 원본 데이터 상태에도 정제된 데이터를 저장하여 초기화 시 문제가 없도록 함
+            setOriginalExtractedData(initialData);
+
             // 오늘 날짜(KST)로 발급일 자동 설정
             const today = getTodayKST();
-            setExtractedData({ ...data, issueDate: today });
-            setOriginalExtractedData(data); // 템플릿 원본 텍스트 유지를 위해 raw data 할당
+            setExtractedData({ ...initialData, issueDate: today });
             console.log(`Template loaded. Default issue date set to: ${today}`);
         } catch (err: any) {
             console.error('Error loading template:', err);

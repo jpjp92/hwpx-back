@@ -11,7 +11,19 @@ Regex 기반 로컬 파싱을 통해 HWPX 문서를 분석하고, PostgreSQL 데
 - **🏗️ Advanced 레이아웃 엔진**:
   - **Hanging Indent**: 긴 주소 텍스트에 대해 자동으로 들여쓰기 좌표를 계산하여 가독성을 높입니다.
   - **Dynamic Shifting**: 내용이 길어질 경우 하단 단락들을 자동으로 밀어내어 겹침을 방지합니다.
-- **🎨 UI/UX Refinement**: 리팩토링된 5:7 레이아웃과 커스텀 모달, 풀스크린 로딩 상태를 지원합니다.
+- **🗓️ 스마트 기간 산출**:
+  - **자동 계산 로직**: 사용자가 연/월 범위만 선택하면, DB의 지급일 데이터를 기반으로 실제 용역 기간(최초 시작일 ~ 최종 종료일)을 자동으로 산출합니다. (로직: 용역월 = 지급월 - 1개월)
+  - **Custom UI**: 연도/월 선택을 위한 직관적인 커스텀 셀렉트 박스를 적용하여 사용성을 개선했습니다.
+- **🧾 검증 UX 고도화**:
+  - **직관적 모달**: 주소 정보와 지급 내역을 섹션별로 분리하여 가독성을 높였습니다.
+  - **지급 내역 제공**: 주소가 다르더라도 실제 지급된 날짜 리스트를 제공하여 본인 확인을 돕습니다.
+- **🏢 용도(Purpose) 필드 개선**:
+  - **드롭다운 UI**: '국민건강보험공단' 등 제출 기관을 간편하게 선택할 수 있습니다.
+  - **자동 후처리**: 화면에서는 기관명만 선택하지만, 다운로드 시 'OOO 제출' 텍스트가 자동으로 붙습니다.
+  - **필수 입력 검증**: 용도 미선택 시 명확한 경고 메시지와 배지(Badge)를 표시하여 누락을 방지합니다.
+- **🎨 UI/UX Refinement**:
+  - **버튼 최적화**: '초기화' 버튼에 버건디(Rose) 컬러를 적용하여 직관성을 높이고, 주요 버튼과 너비를 통일하여 균형을 맞췄습니다.
+  - **사용자 가이드**: 폼 하단에 편집-검토-다운로드 흐름을 안내하는 직관적인 리스트 UI를 추가했습니다.
 - **📂 직관적인 파일명**: 다운로드 시 `신청인성함_건강보험공단제출용해촉증명서.hwpx` 형식으로 자동 생성됩니다.
 
 ### 2. Backend & Security (Server-side)
@@ -60,7 +72,7 @@ flowchart TD
         DB -- "검증 결과" --> API
     end
 
-    API -- "Address Match 여부" --> VERIFY_RES
+    API -- "검증 결과 및 용역기간" --> VERIFY_RES
 ```
 
 ## 🔐 보안 아키텍처 (Security Architecture)
@@ -91,7 +103,7 @@ flowchart TD
 | :--- | :--- | :--- | :--- |
 | `id` | SERIAL | 고유 식별자 | PRIMARY KEY |
 | `manager` | TEXT | 담당자 | |
-| `payment_date` | DATE | 지급년월일 | |
+| `payment_date` | DATE | 지급년월일 | **용역 기간 산출 기준** (용역월 = 지급월 - 1개월) |
 | `registrant_name` | TEXT | 신고소득자명 | **Index** (조회용) |
 | **`ssn`** | **BYTEA** | 주민등록번호 | **AES-256 암호화** 저장 (`pgcrypto`) |
 | **`ssn_hash`** | **TEXT** | 주민번호 해시 | **Blind Index** (이중 해싱: SHA-256 → HMAC-SHA256), **Index** |
@@ -112,17 +124,23 @@ flowchart TD
 hwpx-back/
 ├── src/                       # 프론트엔드 소스 코드 (모듈화된 구조)
 │   ├── components/
+│   │   ├── forms/             # 폼 관련 컴포넌트
+│   │   │   └── EditorForm.tsx # 좌측 입력 폼 패널
+│   │   ├── preview/           # 미리보기 관련 컴포넌트
+│   │   │   └── DocumentPreview.tsx # 우측 A4 미리보기 패널
 │   │   └── ui/                # 재사용 가능한 UI 컴포넌트
 │   │       ├── Card.tsx       # 카드 레이아웃
 │   │       ├── SectionHeader.tsx  # 섹션 헤더
 │   │       ├── Button.tsx     # 커스텀 버튼
-│   │       └── Modal.tsx      # 커스텀 모달 (성공/에러/경고)
+│   │       ├── Modal.tsx      # 커스텀 모달 (성공/에러/경고)
+│   │       └── CustomSelect.tsx # 커스텀 셀렉트 (Search/Scroll 용이)
 │   ├── hooks/                 # 커스텀 React 훅
 │   │   ├── useModal.ts        # 모달 상태 관리
-│   │   ├── useTemplateLoader.ts # [NEW] 템플릿 자동 로딩 및 파싱
+│   │   ├── useTemplateLoader.ts # 템플릿 자동 로딩 및 파싱
 │   │   └── useFileUpload.ts   # [DEPRECATED] 파일 업로드 (참조용 유지)
 │   └── utils/                 # 유틸리티 함수
 │       ├── crypto.ts          # SHA-256 해싱
+│       ├── date.ts            # 날짜 관련 유틸 (KST 변환 등)
 │       ├── xml.ts             # XML 텍스트 치환
 │       └── hwpx/
 │           └── layout.ts      # 레이아웃 계산 (문자 가중치, 상수)
@@ -131,7 +149,7 @@ hwpx-back/
 ├── services/
 │   └── localParserService.ts  # HWPX 파싱 엔진 (Regex 기반)
 ├── db_data/                   # DB 마이그레이션 스크립트 및 문서
-├── App.tsx                    # 메인 애플리케이션
+├── App.tsx                    # 메인 애플리케이션 (상태 관리 및 레이아웃 조정)
 ├── types.ts                   # TypeScript 타입 정의
 └── README.md                  # 프로젝트 문서
 ```
