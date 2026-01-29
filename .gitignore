@@ -4,17 +4,7 @@ node_modules/
 dist/
 .DS_Store
 *.log
-test_data/
-test_xml_fix.cjs
-DesignPlayground.tsx
-test_replace_benchmark.cjs
-services/geminiService.backup.ts
-.vercel
-.env*.local
-db_data/
-README copy.md
-public/verification_db.json
-App_bk.tsx
+sample_UI/
 backup/
-TEMPLATE_MIGRATION_PLAN.md
-scripts/insert_test_data.ts
+db_data/
+.vercel

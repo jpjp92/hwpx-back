@@ -45,16 +45,12 @@ const EditorForm: React.FC<EditorFormProps> = ({
                     { id: 'servicePeriod', label: '용역기간' },
                     { id: 'serviceContent', label: '용역내용' },
                     { id: 'purpose', label: '용도' },
-                    { id: 'issueDate', label: '증명서 발급일' },
                 ].map((field) => (
                     <div key={field.id}>
                         <label className="block text-xs font-medium text-slate-600 mb-1.5 flex justify-between items-center">
                             <span>{field.label}</span>
                             {field.id === 'purpose' && (
                                 <span className="text-[10px] text-rose-500 font-normal bg-rose-50 px-1.5 py-0.5 rounded">필수 선택</span>
-                            )}
-                            {field.id === 'issueDate' && (
-                                <span className="text-[10px] text-blue-500 font-normal bg-blue-50 px-1.5 py-0.5 rounded">자동 설정</span>
                             )}
                         </label>
                         {field.id === 'servicePeriod' ? (
