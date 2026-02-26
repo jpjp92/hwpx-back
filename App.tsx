@@ -99,7 +99,11 @@ const App: React.FC = () => {
 
   const resetChanges = () => {
     if (originalExtractedData) {
-      setExtractedData({ ...originalExtractedData });
+      setExtractedData({ 
+        ...originalExtractedData, 
+        purpose: "", 
+        issueDate: getTodayKST() 
+      });
       setIsVerified(false);
     }
   };
@@ -295,7 +299,7 @@ const App: React.FC = () => {
     try {
       const newZip = new JSZip();
       const files = Object.keys(originalZip.files);
-      const editableKeys: (keyof HWPXData)[] = ['applicant', 'ssn', 'address', 'servicePeriod', 'serviceContent', 'purpose', 'issueDate'];
+      const editableKeys: (keyof HWPXData)[] = ['issueDate', 'applicant', 'ssn', 'address', 'servicePeriod', 'serviceContent', 'purpose'];
 
       // 증명서 발급일이 비어있을 경우 오늘 날짜로 자동 설정
       const finalExtractedData = { ...extractedData };
@@ -334,12 +338,28 @@ const App: React.FC = () => {
 
           let jsonObj = parser.parse(xmlContent);
 
-          // 1. Text Replacement
-          editableKeys.forEach((k) => {
+          // 1. Text Replacement (Two-Phase to prevent substring conflicts)
+          // 가장 긴 원본 문자열부터 치환하여 발급일(issueDate)이 용역기간(servicePeriod)의 일부를 덮어쓰는 문제 방지
+          const sortedKeys = [...editableKeys].sort((a, b) => {
+            const valA = originalExtractedData[a] || "";
+            const valB = originalExtractedData[b] || "";
+            return valB.length - valA.length;
+          });
+
+          // Phase 1: 고유 Placeholder 삽입
+          sortedKeys.forEach((k) => {
             const originalVal = originalExtractedData[k];
-            const currentVal = finalExtractedData[k];
-            if (originalVal && currentVal && originalVal !== currentVal) {
-              jsonObj = replaceTextInObject(jsonObj, originalVal, currentVal);
+            if (originalVal) {
+              jsonObj = replaceTextInObject(jsonObj, originalVal, `__PH_${k}__`);
+            }
+          });
+
+          // Phase 2: Placeholder를 최종 값으로 변경
+          sortedKeys.forEach((k) => {
+            const originalVal = originalExtractedData[k];
+            const currentVal = finalExtractedData[k] !== undefined && finalExtractedData[k] !== null ? finalExtractedData[k] : originalVal;
+            if (originalVal) {
+              jsonObj = replaceTextInObject(jsonObj, `__PH_${k}__`, currentVal);
             }
           });
 

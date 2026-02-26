@@ -46,18 +46,11 @@ export const useTemplateLoader = (): UseTemplateLoaderReturn => {
             // 오늘 날짜(KST) 구하기
             const today = getTodayKST();
 
-            // 초기 데이터 정제
-            const initialData = { ...data };
+            // 원본 데이터 보존 (replaceTextInObject에서 원본 문자열을 찾기 위해 XML 문서의 원래 값 유지 필수)
+            setOriginalExtractedData({ ...data });
 
-            // 1. 용도 필드 초기화 (사용자 선택 유도)
-            initialData.purpose = "";
-
-            // 2. 발급일 자동 설정 (오늘 날짜)
-            // originalExtractedData에도 오늘 날짜를 넣어둬야 '초기화' 시에도 오늘 날짜가 유지됨
-            initialData.issueDate = today;
-
-            // 원본 데이터와 현재 데이터 상태 모두 초기화된 값으로 설정
-            setOriginalExtractedData(initialData);
+            // 사용자에게 보여줄 초기 설정 상태
+            const initialData = { ...data, purpose: "", issueDate: today };
             setExtractedData(initialData);
 
             console.log(`Template loaded. Default issue date set to: ${today}`);

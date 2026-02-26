@@ -9,3 +9,4 @@ backup/
 db_data/
 .vercel
 template/
+.env*.local
